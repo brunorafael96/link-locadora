@@ -211,9 +211,9 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyDQqWLegwTzdQWBV4PkZRpmqdSNqYH3kNw",
-  authDomain: "Link-blindados.firebaseapp.com",
-  projectId: "Link-blindados",
-  storageBucket: "Link-blindados.firebasestorage.app",
+  authDomain: "link-blindados.firebaseapp.com",
+  projectId: "link-blindados",
+  storageBucket: "link-blindados.firebasestorage.app",
   messagingSenderId: "374829542237",
   appId: "1:374829542237:web:966f5a9691033aa2cdd6b4"
 };
@@ -465,9 +465,9 @@ document.getElementById('save-registro').addEventListener('click', ()=>{
     observacoes: document.getElementById('f-observacoes').value.slice(0,100)
   };
   if(editandoRegistroId){
-    db.collection('registros').doc(editandoRegistroId).update(dados).catch(()=>{});
+    db.collection('registros').doc(editandoRegistroId).update(dados).catch(e=>console.error('Erro ao salvar:', e));
   }else{
-    db.collection('registros').add({...dados, criadoEm: Date.now()}).catch(()=>{});
+    db.collection('registros').add({...dados, criadoEm: Date.now()}).catch(e=>console.error('Erro ao salvar:', e));
   }
   overlayRegistro.classList.remove('open');
 });
@@ -478,7 +478,7 @@ const motEmpty = document.getElementById('empty-motoristas');
 const motStatus = document.getElementById('status-motoristas');
 const motFields = ['nome','telefone','endereco'];
 const saveMotDebounced = debounce((id, field, val)=>{
-  db.collection('motoristas').doc(id).update({[field]: val}).catch(()=>{});
+  db.collection('motoristas').doc(id).update({[field]: val}).catch(e=>console.error('Erro ao salvar:', e));
 }, 500);
 
 let todosMotoristas = [];
@@ -526,9 +526,9 @@ document.getElementById('save-motorista').addEventListener('click', ()=>{
     endereco: document.getElementById('m-endereco').value
   };
   if(editandoMotoristaId){
-    db.collection('motoristas').doc(editandoMotoristaId).update(dados).catch(()=>{});
+    db.collection('motoristas').doc(editandoMotoristaId).update(dados).catch(e=>console.error('Erro ao salvar:', e));
   }else{
-    db.collection('motoristas').add({...dados, criadoEm: Date.now()}).catch(()=>{});
+    db.collection('motoristas').add({...dados, criadoEm: Date.now()}).catch(e=>console.error('Erro ao salvar:', e));
   }
   overlayMotorista.classList.remove('open');
 });
