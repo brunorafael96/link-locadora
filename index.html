@@ -48,6 +48,11 @@ button.secondary{background:transparent;border:1px solid var(--border);color:var
 .filtro input[type="month"]{padding:8px 10px;border-radius:9px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-family:inherit;}
 .filtro button{background:transparent;border:1px solid var(--border);color:var(--muted);padding:8px 12px;border-radius:9px;cursor:pointer;font-size:13px;font-family:inherit;font-weight:600;}
 .table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:14px;background:var(--card);box-shadow:var(--shadow);}
+.dia-grupo{margin-bottom:18px;}
+.dia-cabecalho{display:flex;align-items:center;gap:10px;margin-bottom:8px;padding-left:2px;}
+.dia-cabecalho .data{font-size:14.5px;font-weight:800;}
+.dia-cabecalho .badge-hoje{background:var(--accent);color:#fff;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;}
+.dia-grupo.hoje .table-wrap{border-color:var(--accent);}
 table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px;}
 th,td{padding:12px 14px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}
 th{color:var(--muted);font-weight:700;font-size:12.5px;background:transparent;}
@@ -138,15 +143,8 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
       </div>
       <button class="primary" id="add-registro">+ Novo registro</button>
     </div>
-    <div class="table-wrap">
-      <table id="tabela-registros">
-        <thead><tr>
-          <th>Dia</th><th>Carro</th><th>Serviço</th><th>Itinerário</th><th>Motorista</th><th>Observações</th><th></th>
-        </tr></thead>
-        <tbody></tbody>
-      </table>
-      <div class="empty" id="empty-registros" style="display:none;">Nenhum registro ainda. Clique em "Novo registro".</div>
-    </div>
+    <div id="registros-dias"></div>
+    <div class="empty" id="empty-registros" style="display:none;">Nenhum registro ainda. Clique em "Novo registro".</div>
   </section>
 
   <section id="panel-motoristas" class="panel">
@@ -389,23 +387,64 @@ function linkWhatsApp(telefone){
 }
 
 // ---------- Registros ----------
-const regBody = document.querySelector('#tabela-registros tbody');
+const regDiasContainer = document.getElementById('registros-dias');
 const regEmpty = document.getElementById('empty-registros');
 const regStatus = document.getElementById('status-registros');
-const regFields = ['dia','carro','servico','itinerario','motorista','observacoes'];
+const regFieldsExibidos = ['carro','servico','itinerario','motorista','observacoes']; // 'dia' vira o cabeçalho do grupo
 
 let todosRegistros = [];
 const filtroMes = document.getElementById('filtro-mes');
 filtroMes.value = new Date().toISOString().slice(0,7); // mostra só o mês atual por padrão
+
+const DIAS_SEMANA = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+function formatarCabecalhoDia(iso){
+  if(!iso) return 'Sem data';
+  const [a,m,d] = iso.split('-').map(Number);
+  const dt = new Date(a, m-1, d);
+  const semana = DIAS_SEMANA[dt.getDay()];
+  return semana.charAt(0).toUpperCase()+semana.slice(1) + ', ' + String(d).padStart(2,'0') + '/' + String(m).padStart(2,'0');
+}
 
 function aplicarFiltroRegistros(){
   const alvo = filtroMes.value; // formato "yyyy-mm"
   const filtrados = alvo
     ? todosRegistros.filter(d => (d.data().dia || '').slice(0,7) === alvo)
     : todosRegistros;
-  renderRows(regBody, regEmpty, regStatus, filtrados, regFields, id=>{
-    askConfirm('Excluir este registro?', ()=> db.collection('registros').doc(id).delete().catch(()=>{}));
-  }, 'registro(s)', null, undefined, (id, data)=> openModalRegistro(id, data), false);
+
+  regStatus.textContent = filtrados.length + ' registro(s)';
+  regEmpty.style.display = filtrados.length ? 'none' : 'block';
+  regDiasContainer.innerHTML = '';
+
+  const hojeISO = new Date().toISOString().slice(0,10);
+  // agrupa mantendo a ordem (já vem ordenado por 'dia' asc do Firestore)
+  const grupos = [];
+  filtrados.forEach(d=>{
+    const dia = d.data().dia || '';
+    let grupo = grupos.find(g => g.dia === dia);
+    if(!grupo){ grupo = {dia, docs:[]}; grupos.push(grupo); }
+    grupo.docs.push(d);
+  });
+
+  grupos.forEach(grupo=>{
+    const ehHoje = grupo.dia === hojeISO;
+    const secao = document.createElement('div');
+    secao.className = 'dia-grupo' + (ehHoje ? ' hoje' : '');
+    secao.innerHTML = `
+      <div class="dia-cabecalho">
+        <span class="data">${formatarCabecalhoDia(grupo.dia)}</span>
+        ${ehHoje ? '<span class="badge-hoje">Hoje</span>' : ''}
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Carro</th><th>Serviço</th><th>Itinerário</th><th>Motorista</th><th>Observações</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>`;
+    regDiasContainer.appendChild(secao);
+    renderRows(secao.querySelector('tbody'), {style:{}}, {textContent:''}, grupo.docs, regFieldsExibidos, id=>{
+      askConfirm('Excluir este registro?', ()=> db.collection('registros').doc(id).delete().catch(()=>{}));
+    }, '', null, undefined, (id, data)=> openModalRegistro(id, data), false);
+  });
 }
 filtroMes.addEventListener('change', aplicarFiltroRegistros);
 document.getElementById('limpar-filtro').addEventListener('click', ()=>{
