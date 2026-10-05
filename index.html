@@ -98,6 +98,19 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
 .app-oculto{display:none !important;}
 .btn-sair{background:transparent;border:1px solid var(--border);color:var(--muted);padding:7px 13px;border-radius:9px;cursor:pointer;font-size:12.5px;font-family:inherit;font-weight:600;}
 .btn-tema{background:transparent;border:1px solid var(--border);color:var(--text);width:34px;height:34px;border-radius:9px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;padding:0;}
+.link-esqueci{background:none;border:none;color:var(--accent);font-size:12.5px;font-family:inherit;cursor:pointer;margin-top:8px;padding:0;font-weight:600;}
+.login-erro.sucesso{color:#16a34a;}
+.icone-calendario{display:flex;flex-direction:column;width:34px;height:34px;border-radius:9px;overflow:hidden;border:1px solid var(--border);cursor:pointer;flex-shrink:0;background:var(--card);}
+.icone-calendario .cal-topo{background:#e24c3f;color:#fff;font-size:8px;font-weight:800;text-align:center;line-height:11px;text-transform:uppercase;letter-spacing:.02em;}
+.icone-calendario .cal-numero{flex:1;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--text);}
+.busca-registros{padding:8px 10px;border-radius:9px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-family:inherit;min-width:160px;}
+.resumo-hoje{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px;padding:12px 14px;border-radius:12px;background:var(--accent-soft);border:1px solid var(--border);font-size:13px;}
+.resumo-hoje .resumo-texto{font-weight:700;}
+.resumo-hoje .chip{background:var(--card);border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;}
+.badge-status{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;}
+.badge-status.agendado{background:#fef3c7;color:#92400e;}
+.badge-status.andamento{background:#dbeafe;color:#1e40af;}
+.badge-status.concluido{background:#dcfce7;color:#166534;}
 
 @media (max-width: 700px){
   .table-wrap{overflow-x:visible;border:none;background:transparent;box-shadow:none;}
@@ -124,6 +137,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
     <input type="email" id="login-email" placeholder="E-mail" autocomplete="username">
     <input type="password" id="login-senha" placeholder="Senha" autocomplete="current-password">
     <button class="primary" id="login-btn">Entrar</button>
+    <button class="link-esqueci" id="esqueci-senha">Esqueci minha senha</button>
     <div class="login-erro" id="login-erro"></div>
   </div>
 </div>
@@ -146,11 +160,19 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
 
 <main>
   <section id="panel-registros" class="panel active">
+    <div id="resumo-hoje" class="resumo-hoje"></div>
     <div class="toolbar">
       <span class="status" id="status-registros">Carregando...</span>
+      <input type="text" class="busca-registros" id="busca-registros" placeholder="Buscar carro, motorista, serviço...">
       <div class="filtro">
-        <input type="month" id="filtro-mes">
+        <button type="button" class="icone-calendario" id="btn-calendario" aria-label="Escolher mês">
+          <span class="cal-topo" id="cal-topo-mes"></span>
+          <span class="cal-numero" id="cal-numero-dia"></span>
+        </button>
+        <input type="month" id="filtro-mes" style="width:0;height:0;opacity:0;position:absolute;pointer-events:none;">
+        <button type="button" class="secondary" id="label-mes-filtro" style="font-weight:700;"></button>
         <button id="limpar-filtro">Limpar</button>
+        <button class="secondary" id="exportar-csv">⬇ CSV</button>
       </div>
       <button class="primary" id="add-registro">+ Novo registro</button>
     </div>
@@ -178,6 +200,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
   <div class="modal">
     <h2>Novo registro</h2>
     <div class="field"><label>Dia</label><input type="date" id="f-dia"></div>
+    <div class="field"><label>Horário</label><input type="time" id="f-horario"></div>
     <div class="field"><label>Carro</label>
       <select id="f-carro">
         <option value="">Selecione o carro</option>
@@ -204,6 +227,13 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
     <div class="field"><label>Motorista</label>
       <select id="f-motorista">
         <option value="">Selecione o motorista</option>
+      </select>
+    </div>
+    <div class="field"><label>Status</label>
+      <select id="f-status">
+        <option>Agendado</option>
+        <option>Em andamento</option>
+        <option>Concluído</option>
       </select>
     </div>
     <div class="field">
@@ -309,7 +339,7 @@ document.getElementById('ok-confirm').addEventListener('click', ()=>{
 // o campo que está com foco no momento.
 // Rótulos usados no modo "cartão" (telas estreitas), via data-label + CSS.
 const rotulos = {
-  dia:'Dia', carro:'Carro', servico:'Serviço', itinerario:'Itinerário', motorista:'Motorista', observacoes:'Observações',
+  dia:'Dia', horario:'Horário', carro:'Carro', servico:'Serviço', itinerario:'Itinerário', motorista:'Motorista', status:'Status', observacoes:'Observações',
   nome:'Nome', telefone:'Telefone', endereco:'Onde mora'
 };
 
@@ -401,13 +431,15 @@ function linkWhatsApp(telefone){
 const regDiasContainer = document.getElementById('registros-dias');
 const regEmpty = document.getElementById('empty-registros');
 const regStatus = document.getElementById('status-registros');
-const regFieldsExibidos = ['carro','servico','itinerario','motorista','observacoes']; // 'dia' vira o cabeçalho do grupo
+const regFieldsExibidos = ['horario','carro','servico','itinerario','motorista','status','observacoes']; // 'dia' vira o cabeçalho do grupo
 
 let todosRegistros = [];
 const filtroMes = document.getElementById('filtro-mes');
 filtroMes.value = new Date().toISOString().slice(0,7); // mostra só o mês atual por padrão
+const buscaRegistros = document.getElementById('busca-registros');
 
 const DIAS_SEMANA = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+const MESES_ABREV = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 function formatarCabecalhoDia(iso){
   if(!iso) return 'Sem data';
   const [a,m,d] = iso.split('-').map(Number);
@@ -415,12 +447,24 @@ function formatarCabecalhoDia(iso){
   const semana = DIAS_SEMANA[dt.getDay()];
   return semana.charAt(0).toUpperCase()+semana.slice(1) + ', ' + String(d).padStart(2,'0') + '/' + String(m).padStart(2,'0');
 }
+function classeStatus(status){
+  if(status === 'Em andamento') return 'andamento';
+  if(status === 'Concluído') return 'concluido';
+  return 'agendado';
+}
 
 function aplicarFiltroRegistros(){
   const alvo = filtroMes.value; // formato "yyyy-mm"
-  const filtrados = alvo
+  const termo = (buscaRegistros.value || '').trim().toLowerCase();
+  let filtrados = alvo
     ? todosRegistros.filter(d => (d.data().dia || '').slice(0,7) === alvo)
     : todosRegistros;
+  if(termo){
+    filtrados = filtrados.filter(d=>{
+      const data = d.data();
+      return ['carro','servico','itinerario','motorista','observacoes'].some(f => (data[f]||'').toLowerCase().includes(termo));
+    });
+  }
 
   regStatus.textContent = filtrados.length + ' registro(s)';
   regEmpty.style.display = filtrados.length ? 'none' : 'block';
@@ -435,6 +479,11 @@ function aplicarFiltroRegistros(){
     if(!grupo){ grupo = {dia, docs:[]}; grupos.push(grupo); }
     grupo.docs.push(d);
   });
+  // dentro de cada dia, ordena por horário (sem horário fica por último)
+  grupos.forEach(g => g.docs.sort((a,b)=>{
+    const ha = a.data().horario || '99:99', hb = b.data().horario || '99:99';
+    return ha < hb ? -1 : ha > hb ? 1 : 0;
+  }));
 
   grupos.forEach(grupo=>{
     const ehHoje = grupo.dia === hojeISO;
@@ -447,26 +496,126 @@ function aplicarFiltroRegistros(){
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Carro</th><th>Serviço</th><th>Itinerário</th><th>Motorista</th><th>Observações</th><th></th></tr></thead>
+          <thead><tr><th>Horário</th><th>Carro</th><th>Serviço</th><th>Itinerário</th><th>Motorista</th><th>Status</th><th>Observações</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
       </div>`;
     regDiasContainer.appendChild(secao);
-    renderRows(secao.querySelector('tbody'), {style:{}}, {textContent:''}, grupo.docs, regFieldsExibidos, id=>{
+    const tbody = secao.querySelector('tbody');
+    renderRows(tbody, {style:{}}, {textContent:''}, grupo.docs, regFieldsExibidos, id=>{
       askConfirm('Excluir este registro?', ()=> db.collection('registros').doc(id).delete().catch(()=>{}));
     }, '', null, undefined, (id, data)=> openModalRegistro(id, data), false);
+    // transforma a célula de status em badge colorido
+    grupo.docs.forEach(d=>{
+      const tr = tbody.querySelector('tr[data-id="'+d.id+'"]');
+      if(!tr) return;
+      const spanStatus = tr.querySelector('[data-field="status"]');
+      const statusTexto = d.data().status || 'Agendado';
+      if(spanStatus) spanStatus.innerHTML = '<span class="badge-status '+classeStatus(statusTexto)+'">'+statusTexto+'</span>';
+    });
   });
 }
-filtroMes.addEventListener('change', aplicarFiltroRegistros);
+filtroMes.addEventListener('change', ()=>{ atualizarLabelMes(); aplicarFiltroRegistros(); });
+buscaRegistros.addEventListener('input', aplicarFiltroRegistros);
 document.getElementById('limpar-filtro').addEventListener('click', ()=>{
   filtroMes.value = '';
+  atualizarLabelMes();
   aplicarFiltroRegistros();
 });
+
+// ---------- Ícone de calendário e rótulo do mês ----------
+function atualizarLabelMes(){
+  const label = document.getElementById('label-mes-filtro');
+  if(!filtroMes.value){ label.textContent = 'Todos os meses'; return; }
+  const [a,m] = filtroMes.value.split('-').map(Number);
+  label.textContent = MESES_ABREV[m-1].charAt(0).toUpperCase()+MESES_ABREV[m-1].slice(1) + '. de ' + a;
+}
+atualizarLabelMes();
+(function(){
+  const hoje = new Date();
+  document.getElementById('cal-topo-mes').textContent = MESES_ABREV[hoje.getMonth()];
+  document.getElementById('cal-numero-dia').textContent = hoje.getDate();
+})();
+function abrirSeletorMes(){
+  if(filtroMes.showPicker){ filtroMes.showPicker(); } else { filtroMes.focus(); filtroMes.click(); }
+}
+document.getElementById('btn-calendario').addEventListener('click', abrirSeletorMes);
+document.getElementById('label-mes-filtro').addEventListener('click', abrirSeletorMes);
+
+// ---------- Exportar CSV ----------
+function exportarCSV(){
+  const alvo = filtroMes.value;
+  const linhas = [['Dia','Horário','Carro','Serviço','Itinerário','Motorista','Status','Observações']];
+  const base = alvo ? todosRegistros.filter(d => (d.data().dia||'').slice(0,7) === alvo) : todosRegistros;
+  base.forEach(d=>{
+    const x = d.data();
+    linhas.push([x.dia||'', x.horario||'', x.carro||'', x.servico||'', x.itinerario||'', x.motorista||'', x.status||'Agendado', x.observacoes||'']);
+  });
+  const csv = linhas.map(l => l.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'servicos-' + (alvo || 'todos') + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+document.getElementById('exportar-csv').addEventListener('click', exportarCSV);
+
+// ---------- Resumo do dia + favicon/título dinâmicos ----------
+function atualizarResumoHoje(){
+  const hojeISO = new Date().toISOString().slice(0,10);
+  const deHoje = todosRegistros.filter(d => d.data().dia === hojeISO);
+  const motoristasHoje = [...new Set(deHoje.map(d => d.data().motorista).filter(Boolean))];
+  const el = document.getElementById('resumo-hoje');
+  if(!deHoje.length){
+    el.innerHTML = '<span class="resumo-texto">Nenhum serviço agendado para hoje.</span>';
+  }else{
+    const chips = deHoje.filter(d=>d.data().carro && d.data().motorista)
+      .map(d=>'<span class="chip">'+d.data().carro+' → '+d.data().motorista+'</span>').join('');
+    el.innerHTML = '<span class="resumo-texto">'+deHoje.length+' serviço(s) hoje · '+motoristasHoje.length+' motorista(s) em campo</span>' + chips;
+  }
+
+  // favicon e título com o número de serviços de hoje ainda não concluídos
+  const pendentes = deHoje.filter(d => (d.data().status||'Agendado') !== 'Concluído').length;
+  document.title = pendentes > 0 ? '('+pendentes+') Link Locadora' : 'Link Locadora';
+  desenharFaviconComBadge(pendentes);
+}
+
+let logoImgCache = null;
+function desenharFaviconComBadge(numero){
+  const linkIcon = document.querySelector('link[rel="icon"]');
+  if(!logoImgCache){
+    logoImgCache = new Image();
+    logoImgCache.onload = ()=> desenharFaviconComBadge(numero);
+    logoImgCache.src = linkIcon.dataset.original || linkIcon.href;
+    linkIcon.dataset.original = linkIcon.dataset.original || linkIcon.href;
+    return;
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = 64; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(logoImgCache, 0, 0, 64, 64);
+  if(numero > 0){
+    ctx.beginPath();
+    ctx.arc(48, 16, 15, 0, Math.PI*2);
+    ctx.fillStyle = '#dc2626';
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(numero > 9 ? '9+' : String(numero), 48, 17);
+  }
+  linkIcon.href = canvas.toDataURL('image/png');
+}
 
 function watchRegistros(){
   db.collection('registros').orderBy('dia','asc').onSnapshot(snap=>{
     todosRegistros = snap.docs;
     aplicarFiltroRegistros();
+    atualizarResumoHoje();
+    if(typeof renderizarMotoristas === 'function') renderizarMotoristas();
   }, err=>{ regStatus.textContent = 'Erro ao carregar.'; });
 }
 
@@ -514,10 +663,12 @@ function openModalRegistro(id, data){
   editandoRegistroId = id || null;
   document.querySelector('#overlay-registro h2').textContent = id ? 'Editar registro' : 'Novo registro';
   document.getElementById('f-dia').value = data ? (data.dia || '') : new Date().toISOString().slice(0,10);
+  document.getElementById('f-horario').value = data ? (data.horario || '') : '';
   definirSelectFixo('f-carro', OPCOES_CARRO, data ? data.carro : '');
   definirSelectFixo('f-servico', OPCOES_SERVICO, data ? data.servico : '');
   document.getElementById('f-itinerario').value = data ? (data.itinerario || '') : '';
   preencherSelectMotoristas(data ? data.motorista : '');
+  document.getElementById('f-status').value = data ? (data.status || 'Agendado') : 'Agendado';
   const obs = data ? (data.observacoes || '') : '';
   document.getElementById('f-observacoes').value = obs;
   document.getElementById('obs-contador').textContent = obs.length;
@@ -535,10 +686,12 @@ document.getElementById('save-registro').addEventListener('click', ()=>{
   const dia = document.getElementById('f-dia').value || new Date().toISOString().slice(0,10);
   const dados = {
     dia,
+    horario: document.getElementById('f-horario').value,
     carro: document.getElementById('f-carro').value,
     servico: document.getElementById('f-servico').value,
     itinerario: document.getElementById('f-itinerario').value,
     motorista: document.getElementById('f-motorista').value,
+    status: document.getElementById('f-status').value,
     observacoes: document.getElementById('f-observacoes').value.slice(0,100)
   };
   if(editandoRegistroId){
@@ -559,6 +712,41 @@ const saveMotDebounced = debounce((id, field, val)=>{
 }, 500);
 
 let todosMotoristas = [];
+
+// Acha o carro que um motorista está usando hoje, olhando os registros do dia
+function carroHojeDoMotorista(nome){
+  const hojeISO = new Date().toISOString().slice(0,10);
+  const alvo = (nome||'').trim().toLowerCase();
+  const reg = todosRegistros.find(d=>{
+    const x = d.data();
+    return x.dia === hojeISO && (x.motorista||'').trim().toLowerCase() === alvo;
+  });
+  return reg ? reg.data().carro : null;
+}
+
+function renderizarMotoristas(){
+  if(!todosMotoristas) return;
+  renderRows(motBody, motEmpty, motStatus, todosMotoristas, motFields, id=>{
+    askConfirm('Excluir este motorista?', ()=> db.collection('motoristas').doc(id).delete().catch(()=>{}));
+  }, 'motorista(s)', saveMotDebounced, (tdExtra, data)=>{
+    const link = linkWhatsApp(data.telefone);
+    const carroHoje = carroHojeDoMotorista(data.nome);
+    tdExtra.innerHTML = '';
+    if(carroHoje){
+      const badge = document.createElement('span');
+      badge.className = 'chip';
+      badge.style.marginRight = '6px';
+      badge.textContent = '🚗 ' + carroHoje;
+      tdExtra.appendChild(badge);
+    }
+    const a = document.createElement('a');
+    a.className = 'whatsapp-btn' + (link ? '' : ' disabled');
+    a.textContent = '💬 Chamar';
+    if(link){ a.href = link; a.target = '_blank'; a.rel = 'noopener'; }
+    tdExtra.appendChild(a);
+  }, (id, data)=> openModalMotorista(id, data));
+}
+
 function watchMotoristas(){
   db.collection('motoristas').orderBy('criadoEm','asc').onSnapshot(snap=>{
     todosMotoristas = snap.docs;
@@ -566,17 +754,7 @@ function watchMotoristas(){
     if(overlayRegistro.classList.contains('open')){
       preencherSelectMotoristas(document.getElementById('f-motorista').value);
     }
-    renderRows(motBody, motEmpty, motStatus, snap.docs, motFields, id=>{
-      askConfirm('Excluir este motorista?', ()=> db.collection('motoristas').doc(id).delete().catch(()=>{}));
-    }, 'motorista(s)', saveMotDebounced, (tdExtra, data)=>{
-      const link = linkWhatsApp(data.telefone);
-      tdExtra.innerHTML = '';
-      const a = document.createElement('a');
-      a.className = 'whatsapp-btn' + (link ? '' : ' disabled');
-      a.textContent = '💬 Chamar';
-      if(link){ a.href = link; a.target = '_blank'; a.rel = 'noopener'; }
-      tdExtra.appendChild(a);
-    }, (id, data)=> openModalMotorista(id, data));
+    renderizarMotoristas();
   }, err=>{ motStatus.textContent = 'Erro ao carregar.'; });
 }
 
@@ -630,6 +808,7 @@ function tentarLogin(){
   const email = document.getElementById('login-email').value.trim();
   const senha = document.getElementById('login-senha').value;
   const erroEl = document.getElementById('login-erro');
+  erroEl.className = 'login-erro';
   erroEl.textContent = '';
   if(!email || !senha){ erroEl.textContent = 'Preencha e-mail e senha.'; return; }
   firebase.auth().signInWithEmailAndPassword(email, senha).catch(e=>{
@@ -638,6 +817,18 @@ function tentarLogin(){
 }
 document.getElementById('login-btn').addEventListener('click', tentarLogin);
 document.getElementById('login-senha').addEventListener('keydown', e=>{ if(e.key === 'Enter') tentarLogin(); });
+document.getElementById('esqueci-senha').addEventListener('click', ()=>{
+  const email = document.getElementById('login-email').value.trim();
+  const erroEl = document.getElementById('login-erro');
+  if(!email){ erroEl.className = 'login-erro'; erroEl.textContent = 'Digite seu e-mail acima primeiro.'; return; }
+  firebase.auth().sendPasswordResetEmail(email).then(()=>{
+    erroEl.className = 'login-erro sucesso';
+    erroEl.textContent = 'E-mail de recuperação enviado! Confira sua caixa de entrada.';
+  }).catch(()=>{
+    erroEl.className = 'login-erro';
+    erroEl.textContent = 'Não foi possível enviar — confira o e-mail digitado.';
+  });
+});
 document.getElementById('btn-sair').addEventListener('click', ()=> firebase.auth().signOut());
 
 // ---------- Tema claro/escuro ----------
