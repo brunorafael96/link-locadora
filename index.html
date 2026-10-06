@@ -68,7 +68,8 @@ tbody tr{transition:background .12s;}
 tbody tr:hover{background:var(--accent-soft);}
 td input, td textarea{width:100%;border:1px solid transparent;background:transparent;color:var(--text);font-size:14px;padding:5px 7px;border-radius:7px;font-family:inherit;resize:vertical;}
 td input:focus, td textarea:focus{border-color:var(--accent);background:var(--card);outline:none;}
-.ro-value{display:block;padding:5px 7px;font-size:14px;word-break:break-word;}
+.ro-value{display:block;padding:5px 7px;font-size:14px;overflow-wrap:break-word;}
+td[data-label="Horário"] .ro-value, td[data-label="Status"] .ro-value{white-space:nowrap;}
 .del{background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;font-family:inherit;font-weight:600;padding:4px 2px;}
 .status{font-size:12.5px;color:var(--muted);margin-left:2px;font-weight:600;}
 .empty{padding:30px 20px;text-align:center;color:var(--muted);font-size:14px;}
@@ -100,9 +101,11 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
 .btn-tema{background:transparent;border:1px solid var(--border);color:var(--text);width:34px;height:34px;border-radius:9px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;padding:0;}
 .link-esqueci{background:none;border:none;color:var(--accent);font-size:12.5px;font-family:inherit;cursor:pointer;margin-top:8px;padding:0;font-weight:600;}
 .login-erro.sucesso{color:#16a34a;}
-.icone-calendario{display:flex;flex-direction:column;width:34px;height:34px;border-radius:9px;overflow:hidden;border:1px solid var(--border);cursor:pointer;flex-shrink:0;background:var(--card);}
-.icone-calendario .cal-topo{background:#e24c3f;color:#fff;font-size:8px;font-weight:800;text-align:center;line-height:11px;text-transform:uppercase;letter-spacing:.02em;}
-.icone-calendario .cal-numero{flex:1;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--text);}
+.icone-calendario{display:flex;flex-direction:column;width:38px;height:38px;border-radius:10px;overflow:hidden;cursor:pointer;flex-shrink:0;background:#fff;border:none;padding:0;box-shadow:0 1px 2px rgba(0,0,0,.12), 0 4px 10px rgba(0,0,0,.16);transition:transform .15s ease;}
+.icone-calendario:hover{transform:translateY(-1px) scale(1.03);}
+.icone-calendario:active{transform:translateY(0) scale(.98);}
+.icone-calendario .cal-topo{background:linear-gradient(180deg,#ff6a5a,#e5342a);color:#fff;font-size:8px;font-weight:800;text-align:center;line-height:13px;height:13px;text-transform:uppercase;letter-spacing:0;white-space:nowrap;overflow:hidden;}
+.icone-calendario .cal-numero{flex:1;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;color:#1c1c1e;font-family:-apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;line-height:1;}
 .busca-registros{padding:8px 10px;border-radius:9px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-family:inherit;min-width:160px;}
 .resumo-hoje{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px;padding:12px 14px;border-radius:12px;background:var(--accent-soft);border:1px solid var(--border);font-size:13px;}
 .resumo-hoje .resumo-texto{font-weight:700;}
@@ -112,7 +115,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
 .badge-status.andamento{background:#dbeafe;color:#1e40af;}
 .badge-status.concluido{background:#dcfce7;color:#166534;}
 
-@media (max-width: 700px){
+@media (max-width: 860px){
   .table-wrap{overflow-x:visible;border:none;background:transparent;box-shadow:none;}
   table{min-width:0;}
   thead{display:none;}
@@ -562,6 +565,36 @@ function exportarCSV(){
 }
 document.getElementById('exportar-csv').addEventListener('click', exportarCSV);
 
+// ---------- Avanço automático de status ----------
+// Agendado -> Em andamento assim que o horário de início chega.
+// Em andamento -> Concluído assim que o dia do serviço vira (passa da meia-noite).
+// Nunca retrocede um status (se alguém marcou manualmente como Concluído antes da hora, respeita).
+function nivelStatus(s){ return {'Agendado':0,'Em andamento':1,'Concluído':2}[s] ?? 0; }
+
+function avancarStatusAutomaticamente(){
+  if(!db || !todosRegistros.length) return;
+  const agora = new Date();
+  const hojeISO = agora.toISOString().slice(0,10);
+  const horaAtual = String(agora.getHours()).padStart(2,'0')+':'+String(agora.getMinutes()).padStart(2,'0');
+
+  todosRegistros.forEach(d=>{
+    const x = d.data();
+    const atual = x.status || 'Agendado';
+    let alvo = atual;
+
+    if(x.dia && x.dia < hojeISO){
+      alvo = 'Concluído'; // o dia do serviço já passou
+    } else if(x.dia === hojeISO && x.horario && x.horario <= horaAtual){
+      alvo = 'Em andamento'; // o horário de início já chegou, hoje
+    }
+
+    if(nivelStatus(alvo) > nivelStatus(atual)){
+      db.collection('registros').doc(d.id).update({status: alvo}).catch(()=>{});
+    }
+  });
+}
+setInterval(avancarStatusAutomaticamente, 60000); // reavalia a cada minuto
+
 // ---------- Resumo do dia + favicon/título dinâmicos ----------
 function atualizarResumoHoje(){
   const hojeISO = new Date().toISOString().slice(0,10);
@@ -615,6 +648,7 @@ function watchRegistros(){
     todosRegistros = snap.docs;
     aplicarFiltroRegistros();
     atualizarResumoHoje();
+    avancarStatusAutomaticamente();
     if(typeof renderizarMotoristas === 'function') renderizarMotoristas();
   }, err=>{ regStatus.textContent = 'Erro ao carregar.'; });
 }
