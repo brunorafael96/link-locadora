@@ -114,6 +114,8 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
 .badge-status.agendado{background:#fef3c7;color:#92400e;}
 .badge-status.andamento{background:#dbeafe;color:#1e40af;}
 .badge-status.concluido{background:#dcfce7;color:#166534;}
+.avatar-motorista{width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--accent);color:#fff;font-size:12px;font-weight:700;}
+img.avatar-motorista{background:var(--bg);}
 
 @media (max-width: 860px){
   .table-wrap{overflow-x:visible;border:none;background:transparent;box-shadow:none;}
@@ -257,6 +259,12 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
     <div class="field"><label>Nome</label><input type="text" id="m-nome" placeholder="Nome do motorista"></div>
     <div class="field"><label>Telefone</label><input type="text" id="m-telefone" placeholder="(21) 90000-0000"></div>
     <div class="field"><label>Onde mora</label><input type="text" id="m-endereco" placeholder="Bairro / cidade"></div>
+    <div class="field"><label>Foto</label>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <img id="m-foto-preview" style="width:56px;height:56px;border-radius:10px;object-fit:cover;background:var(--bg);border:1px solid var(--border);display:none;">
+        <input type="file" accept="image/*" id="m-foto-input" style="flex:1;font-size:12.5px;">
+      </div>
+    </div>
     <div class="field"><label>Carteira</label>
       <select id="m-carteira">
         <option value="">Selecione</option>
@@ -281,6 +289,22 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
   </div>
 </div>
 
+<div class="overlay" id="overlay-pdf">
+  <div class="modal">
+    <h2>Serviço cadastrado!</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-10px 0 14px;">PDF da ordem de serviço gerado.</p>
+    <div style="display:flex;flex-direction:column;gap:9px;">
+      <button class="primary" id="pdf-compartilhar">📤 Compartilhar (WhatsApp, E-mail...)</button>
+      <button class="secondary" id="pdf-imprimir">🖨️ Imprimir</button>
+      <button class="secondary" id="pdf-baixar">⬇ Baixar PDF</button>
+    </div>
+    <div class="modal-actions">
+      <button class="secondary" id="pdf-fechar">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
@@ -747,8 +771,113 @@ document.getElementById('save-registro').addEventListener('click', ()=>{
     db.collection('registros').doc(editandoRegistroId).update(dados).catch(e=>console.error('Erro ao salvar:', e));
   }else{
     db.collection('registros').add({...dados, criadoEm: Date.now()}).catch(e=>console.error('Erro ao salvar:', e));
+    // só gera o PDF para serviço NOVO, não ao editar
+    gerarPdfServicoCompleto(dados).then(blob=> mostrarOpcoesPdf(blob, 'servico-'+dados.dia+'.pdf')).catch(e=>console.error('Erro ao gerar PDF:', e));
   }
   overlayRegistro.classList.remove('open');
+});
+
+// ---------- PDF da ordem de serviço (logo + empresa + serviço + motorista) ----------
+async function gerarPdfServicoCompleto(dadosServico){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const logoUri = document.querySelector('link[rel="icon"]').dataset.original || document.querySelector('.logo').src;
+
+  try{ doc.addImage(logoUri, 'JPEG', 14, 12, 18, 18); }catch(e){}
+  doc.setFontSize(17); doc.setFont(undefined,'bold'); doc.text('Link Blindados', 37, 20);
+  doc.setFontSize(10.5); doc.setFont(undefined,'normal'); doc.setTextColor(130); doc.text('Ordem de Serviço', 37, 27);
+  doc.setTextColor(0);
+  doc.setDrawColor(220); doc.line(14, 37, 196, 37);
+
+  let y = 50;
+  doc.setFontSize(12.5); doc.setFont(undefined,'bold'); doc.text('Serviço', 14, y); y += 9;
+  doc.setFontSize(10.5);
+  const linhasServico = [
+    ['Dia', formatarData(dadosServico.dia)],
+    ['Horário', dadosServico.horario || '-'],
+    ['Carro', dadosServico.carro || '-'],
+    ['Serviço', dadosServico.servico || '-'],
+    ['Itinerário', dadosServico.itinerario || '-'],
+    ['Status', dadosServico.status || 'Agendado'],
+  ];
+  linhasServico.forEach(([l,v])=>{
+    doc.setFont(undefined,'bold'); doc.text(l+':', 14, y);
+    doc.setFont(undefined,'normal'); doc.text(String(v), 55, y, {maxWidth:135});
+    y += 8;
+  });
+  if(dadosServico.observacoes){
+    doc.setFont(undefined,'bold'); doc.text('Observações:', 14, y);
+    doc.setFont(undefined,'normal');
+    const linhasObs = doc.splitTextToSize(dadosServico.observacoes, 135);
+    doc.text(linhasObs, 55, y);
+    y += 8 * linhasObs.length;
+  }
+
+  y += 8;
+  doc.setDrawColor(220); doc.line(14, y, 196, y); y += 14;
+
+  doc.setFontSize(12.5); doc.setFont(undefined,'bold'); doc.text('Motorista', 14, y);
+  const motorista = todosMotoristas.find(d => (d.data().nome||'').trim().toLowerCase() === (dadosServico.motorista||'').trim().toLowerCase());
+  const md = motorista ? motorista.data() : null;
+  if(md && md.foto){ try{ doc.addImage(md.foto, 'JPEG', 165, y-7, 28, 28); }catch(e){} }
+  y += 9;
+  doc.setFontSize(10.5);
+  const linhasMotorista = [
+    ['Nome', md ? (md.nome||'-') : (dadosServico.motorista || '-')],
+    ['Telefone', md ? (md.telefone||'-') : '-'],
+    ['Onde mora', md ? (md.endereco||'-') : '-'],
+    ['Carteira', md ? (md.carteira||'-') : '-'],
+  ];
+  linhasMotorista.forEach(([l,v])=>{
+    doc.setFont(undefined,'bold'); doc.text(l+':', 14, y);
+    doc.setFont(undefined,'normal'); doc.text(String(v), 55, y, {maxWidth:95});
+    y += 8;
+  });
+
+  return doc.output('blob');
+}
+
+let pdfBlobAtual = null, pdfNomeAtual = 'servico.pdf';
+function mostrarOpcoesPdf(blob, nomeArquivo){
+  pdfBlobAtual = blob;
+  pdfNomeAtual = nomeArquivo;
+  document.getElementById('overlay-pdf').classList.add('open');
+}
+document.getElementById('pdf-fechar').addEventListener('click', ()=> document.getElementById('overlay-pdf').classList.remove('open'));
+document.getElementById('overlay-pdf').addEventListener('click', e=>{ if(e.target.id === 'overlay-pdf') document.getElementById('overlay-pdf').classList.remove('open'); });
+
+document.getElementById('pdf-baixar').addEventListener('click', ()=>{
+  if(!pdfBlobAtual) return;
+  const url = URL.createObjectURL(pdfBlobAtual);
+  const a = document.createElement('a');
+  a.href = url; a.download = pdfNomeAtual;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('pdf-imprimir').addEventListener('click', ()=>{
+  if(!pdfBlobAtual) return;
+  const url = URL.createObjectURL(pdfBlobAtual);
+  const janela = window.open(url, '_blank');
+  if(janela){
+    janela.addEventListener('load', ()=>{ try{ janela.print(); }catch(e){} });
+  }else{
+    alert('Não foi possível abrir a janela de impressão — verifique se o navegador bloqueou pop-ups.');
+  }
+});
+
+document.getElementById('pdf-compartilhar').addEventListener('click', async ()=>{
+  if(!pdfBlobAtual) return;
+  try{
+    const file = new File([pdfBlobAtual], pdfNomeAtual, {type:'application/pdf'});
+    if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title:'Ordem de Serviço - Link Blindados'});
+      return;
+    }
+  }catch(e){
+    if(e && e.name === 'AbortError') return;
+  }
+  alert('Este navegador não permite compartilhar arquivos diretamente. Use "Baixar PDF" e envie manualmente pelo WhatsApp, e-mail, etc.');
 });
 
 // ---------- Motoristas ----------
@@ -794,6 +923,20 @@ function renderizarMotoristas(){
     if(link){ a.href = link; a.target = '_blank'; a.rel = 'noopener'; }
     tdExtra.appendChild(a);
   }, (id, data)=> openModalMotorista(id, data));
+
+  // insere o avatar da foto ao lado do nome
+  todosMotoristas.forEach(d=>{
+    const tr = motBody.querySelector('tr[data-id="'+d.id+'"]');
+    if(!tr) return;
+    const tdNome = tr.querySelector('[data-field="nome"]')?.closest('td');
+    if(!tdNome || tdNome.querySelector('.avatar-motorista')) return;
+    const foto = d.data().foto;
+    const avatar = document.createElement(foto ? 'img' : 'span');
+    avatar.className = 'avatar-motorista';
+    if(foto){ avatar.src = foto; } else { avatar.textContent = (d.data().nome||'?').trim().charAt(0).toUpperCase(); }
+    tdNome.style.display = 'flex'; tdNome.style.alignItems = 'center'; tdNome.style.gap = '8px';
+    tdNome.insertBefore(avatar, tdNome.firstChild);
+  });
 }
 
 function watchMotoristas(){
@@ -810,6 +953,43 @@ function watchMotoristas(){
 // Modal de novo/editar motorista — pede nome, telefone e onde mora
 const overlayMotorista = document.getElementById('overlay-motorista');
 let editandoMotoristaId = null;
+let fotoMotoristaAtual = null; // base64 da foto (já comprimida), ou null
+
+function comprimirImagem(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const tam = 240;
+        const canvas = document.createElement('canvas');
+        canvas.width = tam; canvas.height = tam;
+        const ctx = canvas.getContext('2d');
+        // corta no centro (quadrado) pra evitar distorcer o rosto
+        const lado = Math.min(img.width, img.height);
+        const sx = (img.width - lado)/2, sy = (img.height - lado)/2;
+        ctx.drawImage(img, sx, sy, lado, lado, 0, 0, tam, tam);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById('m-foto-input').addEventListener('change', async e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    fotoMotoristaAtual = await comprimirImagem(file);
+    const prev = document.getElementById('m-foto-preview');
+    prev.src = fotoMotoristaAtual;
+    prev.style.display = 'block';
+  }catch(err){ console.error('Erro ao processar foto:', err); }
+});
+
 function openModalMotorista(id, data){
   editandoMotoristaId = id || null;
   document.querySelector('#overlay-motorista h2').textContent = id ? 'Editar motorista' : 'Novo motorista';
@@ -817,6 +997,11 @@ function openModalMotorista(id, data){
   document.getElementById('m-telefone').value = data ? (data.telefone || '') : '';
   document.getElementById('m-endereco').value = data ? (data.endereco || '') : '';
   document.getElementById('m-carteira').value = data ? (data.carteira || '') : '';
+  document.getElementById('m-foto-input').value = '';
+  fotoMotoristaAtual = data ? (data.foto || null) : null;
+  const prev = document.getElementById('m-foto-preview');
+  if(fotoMotoristaAtual){ prev.src = fotoMotoristaAtual; prev.style.display = 'block'; }
+  else{ prev.style.display = 'none'; }
   overlayMotorista.classList.add('open');
   document.getElementById('m-nome').focus();
 }
@@ -829,7 +1014,8 @@ document.getElementById('save-motorista').addEventListener('click', ()=>{
     nome: document.getElementById('m-nome').value,
     telefone: document.getElementById('m-telefone').value,
     endereco: document.getElementById('m-endereco').value,
-    carteira: document.getElementById('m-carteira').value
+    carteira: document.getElementById('m-carteira').value,
+    foto: fotoMotoristaAtual || ''
   };
   if(editandoMotoristaId){
     db.collection('motoristas').doc(editandoMotoristaId).update(dados).catch(e=>console.error('Erro ao salvar:', e));
