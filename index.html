@@ -51,7 +51,15 @@ main{padding:20px 22px 60px;max-width:1200px;margin:0 auto;}
 button.primary{background:var(--accent);color:#fff;border:none;padding:10px 18px;border-radius:9px;cursor:pointer;font-size:13.5px;font-weight:700;font-family:inherit;transition:background .15s;}
 button.primary:hover{background:var(--accent-hover);}
 button.secondary{background:transparent;border:1px solid var(--border);color:var(--text);padding:9px 16px;border-radius:9px;cursor:pointer;font-size:13.5px;font-weight:600;font-family:inherit;}
-.filtro{display:flex;align-items:center;gap:6px;}
+.filtro{display:flex;align-items:center;gap:6px;position:relative;}
+.popover-mes{display:none;position:absolute;top:calc(100% + 8px);left:0;z-index:30;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.25);padding:12px;width:250px;}
+.popover-mes.open{display:block;}
+.pm-topo{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-weight:800;font-size:14px;}
+.pm-topo button{background:none;border:1px solid var(--border);border-radius:8px;width:30px;height:30px;cursor:pointer;color:var(--text);font-size:17px;font-family:inherit;line-height:1;}
+.pm-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.pm-grid button{padding:10px 0;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;}
+.pm-grid button.hoje{border-color:var(--accent);}
+.pm-grid button.sel{background:var(--accent);color:#fff;border-color:var(--accent);}
 .filtro input[type="month"]{padding:8px 10px;border-radius:9px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-family:inherit;}
 .filtro button{background:transparent;border:1px solid var(--border);color:var(--muted);padding:8px 12px;border-radius:9px;cursor:pointer;font-size:13px;font-family:inherit;font-weight:600;}
 .table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:14px;background:var(--card);box-shadow:var(--shadow);}
@@ -118,6 +126,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
 img.avatar-motorista{background:var(--bg);}
 
 @media (max-width: 860px){
+  .popover-mes{position:fixed;left:50%;top:30%;transform:translateX(-50%);width:min(290px,90vw);}
   .table-wrap{overflow-x:visible;border:none;background:transparent;box-shadow:none;}
   table{min-width:0;}
   thead{display:none;}
@@ -174,7 +183,15 @@ img.avatar-motorista{background:var(--bg);}
           <span class="cal-topo" id="cal-topo-mes"></span>
           <span class="cal-numero" id="cal-numero-dia"></span>
         </button>
-        <input type="month" id="filtro-mes" style="width:0;height:0;opacity:0;position:absolute;pointer-events:none;">
+        <input type="hidden" id="filtro-mes">
+        <div class="popover-mes" id="popover-mes">
+          <div class="pm-topo">
+            <button type="button" id="pm-ano-ant" aria-label="Ano anterior">‹</button>
+            <span id="pm-ano"></span>
+            <button type="button" id="pm-ano-prox" aria-label="Próximo ano">›</button>
+          </div>
+          <div class="pm-grid" id="pm-grid"></div>
+        </div>
         <button type="button" class="secondary" id="label-mes-filtro" style="font-weight:700;"></button>
         <button id="limpar-filtro">Limpar</button>
         <button class="secondary" id="exportar-csv">⬇ CSV</button>
@@ -291,7 +308,7 @@ img.avatar-motorista{background:var(--bg);}
 
 <div class="overlay" id="overlay-pdf">
   <div class="modal">
-    <h2>Serviço cadastrado!</h2>
+    <h2 id="pdf-titulo">Serviço cadastrado!</h2>
     <p style="font-size:13px;color:var(--muted);margin:-10px 0 14px;">PDF da ordem de serviço gerado.</p>
     <div style="display:flex;flex-direction:column;gap:9px;">
       <button class="primary" id="pdf-compartilhar">📤 Compartilhar (WhatsApp, E-mail...)</button>
@@ -318,6 +335,12 @@ const firebaseConfig = {
   appId: "1:374829542237:web:966f5a9691033aa2cdd6b4"
 };
 firebase.initializeApp(firebaseConfig);
+
+// Data de hoje no fuso do aparelho (toISOString usa UTC e "virava o dia" às 21h no Brasil)
+function hojeLocalISO(){
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
@@ -469,7 +492,7 @@ const regFieldsExibidos = ['horario','carro','servico','itinerario','motorista',
 
 let todosRegistros = [];
 const filtroMes = document.getElementById('filtro-mes');
-filtroMes.value = new Date().toISOString().slice(0,7); // mostra só o mês atual por padrão
+filtroMes.value = hojeLocalISO().slice(0,7); // mostra só o mês atual por padrão
 const buscaRegistros = document.getElementById('busca-registros');
 
 const DIAS_SEMANA = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
@@ -504,7 +527,7 @@ function aplicarFiltroRegistros(){
   regEmpty.style.display = filtrados.length ? 'none' : 'block';
   regDiasContainer.innerHTML = '';
 
-  const hojeISO = new Date().toISOString().slice(0,10);
+  const hojeISO = hojeLocalISO();
   // agrupa mantendo a ordem (já vem ordenado por 'dia' asc do Firestore)
   const grupos = [];
   filtrados.forEach(d=>{
@@ -554,10 +577,25 @@ function aplicarFiltroRegistros(){
       const spanStatus = tr.querySelector('[data-field="status"]');
       const statusTexto = d.data().status || 'Agendado';
       if(spanStatus) spanStatus.innerHTML = '<span class="badge-status '+classeStatus(statusTexto)+'">'+statusTexto+'</span>';
+      // botão PDF para voltar e pegar o PDF de serviços já cadastrados
+      const tdAcoes = tr.lastElementChild;
+      if(tdAcoes && !tdAcoes.querySelector('.btn-pdf')){
+        const btnPdf = document.createElement('button');
+        btnPdf.className = 'del btn-pdf';
+        btnPdf.style.color = 'var(--accent)';
+        btnPdf.textContent = 'PDF';
+        btnPdf.addEventListener('click', async ()=>{
+          const dados = d.data();
+          try{
+            const blob = await gerarPdfServicoCompleto(dados);
+            mostrarOpcoesPdf(blob, 'servico-'+(dados.dia||'sem-data')+'.pdf', 'PDF do serviço');
+          }catch(e){ console.error('Erro ao gerar PDF:', e); }
+        });
+        tdAcoes.insertBefore(btnPdf, tdAcoes.firstChild);
+      }
     });
   });
 }
-filtroMes.addEventListener('change', ()=>{ atualizarLabelMes(); aplicarFiltroRegistros(); });
 buscaRegistros.addEventListener('input', aplicarFiltroRegistros);
 document.getElementById('limpar-filtro').addEventListener('click', ()=>{
   filtroMes.value = '';
@@ -578,9 +616,43 @@ atualizarLabelMes();
   document.getElementById('cal-topo-mes').textContent = MESES_ABREV[hoje.getMonth()];
   document.getElementById('cal-numero-dia').textContent = hoje.getDate();
 })();
-function abrirSeletorMes(){
-  if(filtroMes.showPicker){ filtroMes.showPicker(); } else { filtroMes.focus(); filtroMes.click(); }
+// Seletor de mês próprio: <input type="month"> não existe no Safari de computador
+// e é instável no iOS, então montamos o nosso (ano + grade de meses).
+const popoverMes = document.getElementById('popover-mes');
+let pmAno = new Date().getFullYear();
+function definirMesFiltro(valor){
+  filtroMes.value = valor;
+  atualizarLabelMes();
+  aplicarFiltroRegistros();
 }
+function renderPopoverMes(){
+  document.getElementById('pm-ano').textContent = pmAno;
+  const grid = document.getElementById('pm-grid');
+  grid.innerHTML = '';
+  const [selA, selM] = filtroMes.value ? filtroMes.value.split('-').map(Number) : [null, null];
+  const hoje = new Date();
+  MESES_ABREV.forEach((m, i)=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = m.charAt(0).toUpperCase() + m.slice(1);
+    if(selA === pmAno && selM === i+1) b.classList.add('sel');
+    if(hoje.getFullYear() === pmAno && hoje.getMonth() === i) b.classList.add('hoje');
+    b.addEventListener('click', ()=>{
+      definirMesFiltro(pmAno + '-' + String(i+1).padStart(2,'0'));
+      popoverMes.classList.remove('open');
+    });
+    grid.appendChild(b);
+  });
+}
+function abrirSeletorMes(){
+  if(popoverMes.classList.contains('open')){ popoverMes.classList.remove('open'); return; }
+  pmAno = filtroMes.value ? Number(filtroMes.value.split('-')[0]) : new Date().getFullYear();
+  renderPopoverMes();
+  popoverMes.classList.add('open');
+}
+document.getElementById('pm-ano-ant').addEventListener('click', ()=>{ pmAno--; renderPopoverMes(); });
+document.getElementById('pm-ano-prox').addEventListener('click', ()=>{ pmAno++; renderPopoverMes(); });
+document.addEventListener('click', e=>{ if(!e.target.closest('.filtro')) popoverMes.classList.remove('open'); });
 document.getElementById('btn-calendario').addEventListener('click', abrirSeletorMes);
 document.getElementById('label-mes-filtro').addEventListener('click', abrirSeletorMes);
 
@@ -613,7 +685,7 @@ function nivelStatus(s){ return {'Agendado':0,'Em andamento':1,'Concluído':2}[s
 function avancarStatusAutomaticamente(){
   if(!db || !todosRegistros.length) return;
   const agora = new Date();
-  const hojeISO = agora.toISOString().slice(0,10);
+  const hojeISO = hojeLocalISO();
   const horaAtual = String(agora.getHours()).padStart(2,'0')+':'+String(agora.getMinutes()).padStart(2,'0');
 
   todosRegistros.forEach(d=>{
@@ -636,7 +708,7 @@ setInterval(avancarStatusAutomaticamente, 60000); // reavalia a cada minuto
 
 // ---------- Resumo do dia + favicon/título dinâmicos ----------
 function atualizarResumoHoje(){
-  const hojeISO = new Date().toISOString().slice(0,10);
+  const hojeISO = hojeLocalISO();
   const deHoje = todosRegistros.filter(d => d.data().dia === hojeISO);
   const motoristasHoje = [...new Set(deHoje.map(d => d.data().motorista).filter(Boolean))];
   const el = document.getElementById('resumo-hoje');
@@ -735,7 +807,7 @@ function preencherSelectMotoristas(valorAtual){
 function openModalRegistro(id, data){
   editandoRegistroId = id || null;
   document.querySelector('#overlay-registro h2').textContent = id ? 'Editar registro' : 'Novo registro';
-  document.getElementById('f-dia').value = data ? (data.dia || '') : new Date().toISOString().slice(0,10);
+  document.getElementById('f-dia').value = data ? (data.dia || '') : hojeLocalISO();
   document.getElementById('f-horario').value = data ? (data.horario || '') : '';
   definirSelectFixo('f-carro', OPCOES_CARRO, data ? data.carro : '');
   definirSelectFixo('f-servico', OPCOES_SERVICO, data ? data.servico : '');
@@ -756,7 +828,7 @@ document.getElementById('cancel-registro').addEventListener('click', ()=> overla
 overlayRegistro.addEventListener('click', e=>{ if(e.target === overlayRegistro) overlayRegistro.classList.remove('open'); });
 document.getElementById('save-registro').addEventListener('click', ()=>{
   if(!db) return;
-  const dia = document.getElementById('f-dia').value || new Date().toISOString().slice(0,10);
+  const dia = document.getElementById('f-dia').value || hojeLocalISO();
   const dados = {
     dia,
     horario: document.getElementById('f-horario').value,
@@ -825,8 +897,6 @@ async function gerarPdfServicoCompleto(dadosServico){
   const linhasMotorista = [
     ['Nome', md ? (md.nome||'-') : (dadosServico.motorista || '-')],
     ['Telefone', md ? (md.telefone||'-') : '-'],
-    ['Onde mora', md ? (md.endereco||'-') : '-'],
-    ['Carteira', md ? (md.carteira||'-') : '-'],
   ];
   linhasMotorista.forEach(([l,v])=>{
     doc.setFont(undefined,'bold'); doc.text(l+':', 14, y);
@@ -838,9 +908,10 @@ async function gerarPdfServicoCompleto(dadosServico){
 }
 
 let pdfBlobAtual = null, pdfNomeAtual = 'servico.pdf';
-function mostrarOpcoesPdf(blob, nomeArquivo){
+function mostrarOpcoesPdf(blob, nomeArquivo, titulo){
   pdfBlobAtual = blob;
   pdfNomeAtual = nomeArquivo;
+  document.getElementById('pdf-titulo').textContent = titulo || 'Serviço cadastrado!';
   document.getElementById('overlay-pdf').classList.add('open');
 }
 document.getElementById('pdf-fechar').addEventListener('click', ()=> document.getElementById('overlay-pdf').classList.remove('open'));
@@ -893,7 +964,7 @@ let todosMotoristas = [];
 
 // Acha o carro que um motorista está usando hoje, olhando os registros do dia
 function carroHojeDoMotorista(nome){
-  const hojeISO = new Date().toISOString().slice(0,10);
+  const hojeISO = hojeLocalISO();
   const alvo = (nome||'').trim().toLowerCase();
   const reg = todosRegistros.find(d=>{
     const x = d.data();
