@@ -77,20 +77,25 @@ tbody tr:hover{background:var(--accent-soft);}
 td input, td textarea{width:100%;border:1px solid transparent;background:transparent;color:var(--text);font-size:14px;padding:5px 7px;border-radius:7px;font-family:inherit;resize:vertical;}
 td input:focus, td textarea:focus{border-color:var(--accent);background:var(--card);outline:none;}
 .ro-value{display:block;padding:5px 7px;font-size:14px;overflow-wrap:break-word;}
-td[data-label="Horário"] .ro-value, td[data-label="Status"] .ro-value{white-space:nowrap;}
+td[data-label="Horário"] .ro-value, td[data-label="Status"] .ro-value, td[data-label="Valor"] .ro-value, td[data-label="Pagamento"] .ro-value{white-space:nowrap;}
 .del{background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;font-family:inherit;font-weight:600;padding:4px 2px;}
 .status{font-size:12.5px;color:var(--muted);margin-left:2px;font-weight:600;}
 .empty{padding:30px 20px;text-align:center;color:var(--muted);font-size:14px;}
 footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
 .overlay{position:fixed;inset:0;background:rgba(10,12,18,.55);display:none;align-items:center;justify-content:center;padding:16px;z-index:10;backdrop-filter:blur(2px);}
 .overlay.open{display:flex;}
-.modal{background:var(--card);border-radius:16px;padding:22px;width:100%;max-width:420px;box-shadow:0 20px 50px rgba(0,0,0,.25);border:1px solid var(--border);}
+.modal{background:var(--card);border-radius:16px;padding:22px;width:100%;max-width:420px;box-shadow:0 20px 50px rgba(0,0,0,.25);border:1px solid var(--border);max-height:calc(100vh - 32px);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
+@supports (height:100dvh){.modal{max-height:calc(100dvh - 32px);}}
 .modal h2{margin:0 0 16px;font-size:17px;font-weight:800;}
 .field{margin-bottom:13px;}
 .field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:5px;font-weight:600;}
 .field input{width:100%;padding:10px 11px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;}
 .field select{width:100%;padding:10px 11px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;}
 .field input:focus, .field select:focus{border-color:var(--accent);outline:none;}
+.input-moeda{display:flex;align-items:center;border:1px solid var(--border);border-radius:9px;background:var(--bg);}
+.input-moeda:focus-within{border-color:var(--accent);}
+.input-moeda span{padding-left:11px;color:var(--muted);font-size:14px;font-weight:600;}
+.field .input-moeda input{border:none;background:transparent;padding:10px 11px 10px 6px;border-radius:0 9px 9px 0;}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
 .whatsapp-btn{display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;text-decoration:none;padding:7px 12px;border-radius:8px;font-size:13px;white-space:nowrap;border:none;font-family:inherit;cursor:pointer;font-weight:600;}
 .whatsapp-btn.disabled{opacity:.35;pointer-events:none;}
@@ -122,6 +127,8 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
 .badge-status.agendado{background:#fef3c7;color:#92400e;}
 .badge-status.andamento{background:#dbeafe;color:#1e40af;}
 .badge-status.concluido{background:#dcfce7;color:#166534;}
+.badge-status.pago{background:#dcfce7;color:#166534;}
+.badge-status.naopago{background:#fee2e2;color:#991b1b;}
 .avatar-motorista{width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--accent);color:#fff;font-size:12px;font-weight:700;}
 img.avatar-motorista{background:var(--bg);}
 .thumb-carro{width:46px;height:34px;border-radius:7px;object-fit:cover;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--bg);border:1px solid var(--border);font-size:16px;}
@@ -250,6 +257,7 @@ img.avatar-motorista{background:var(--bg);}
         <option value="">Selecione o serviço</option>
         <option>Transfer</option>
         <option>Disposição</option>
+        <option>Orçamento</option>
       </select>
     </div>
     <div class="field"><label>Itinerário</label><input type="text" id="f-itinerario" placeholder="Ex: Barra → Aeroporto Galeão"></div>
@@ -269,6 +277,15 @@ img.avatar-motorista{background:var(--bg);}
       <label>Observações</label>
       <textarea id="f-observacoes" maxlength="100" rows="2" placeholder="Até 100 caracteres" style="width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;resize:vertical;"></textarea>
       <div style="text-align:right;font-size:11px;color:var(--muted);margin-top:2px;"><span id="obs-contador">0</span>/100</div>
+    </div>
+    <div class="field"><label>Valor</label>
+      <div class="input-moeda"><span>R$</span><input type="text" id="f-valor" inputmode="numeric" placeholder="0,00" autocomplete="off"></div>
+    </div>
+    <div class="field"><label>Status pagamento</label>
+      <select id="f-pagamento">
+        <option>Pago</option>
+        <option>Não pago</option>
+      </select>
     </div>
     <div class="modal-actions">
       <button class="secondary" id="cancel-registro">Cancelar</button>
@@ -364,6 +381,23 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 
 // Data de hoje no fuso do aparelho (toISOString usa UTC e "virava o dia" às 21h no Brasil)
+// Moeda: o campo mostra "1.234,56" enquanto digita; no banco vai como número (1234.56)
+function formatarReais(v){
+  if(v === undefined || v === null || v === '') return '—';
+  return Number(v).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+}
+function mascararMoeda(texto){
+  const d = String(texto).replace(/\D/g,'').slice(0,11);
+  if(!d) return '';
+  return (parseInt(d,10)/100).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function lerMoeda(texto){
+  const s = String(texto||'').trim();
+  if(!s) return null;
+  const n = Number(s.replace(/\./g,'').replace(',','.'));
+  return isNaN(n) ? null : n;
+}
+
 function hojeLocalISO(){
   const d = new Date();
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -425,7 +459,7 @@ document.getElementById('ok-confirm').addEventListener('click', ()=>{
 // o campo que está com foco no momento.
 // Rótulos usados no modo "cartão" (telas estreitas), via data-label + CSS.
 const rotulos = {
-  cliente:'Cliente', dia:'Dia', horario:'Horário', carro:'Carro', servico:'Serviço', itinerario:'Itinerário', motorista:'Motorista', status:'Status', observacoes:'Observações',
+  cliente:'Cliente', dia:'Dia', horario:'Horário', carro:'Carro', servico:'Serviço', itinerario:'Itinerário', motorista:'Motorista', status:'Status', observacoes:'Observações', valor:'Valor', pagamento:'Pagamento',
   nome:'Nome', telefone:'Telefone', endereco:'Onde mora', carteira:'Carteira',
   modelo:'Modelo', placa:'Placa', cor:'Cor', ano:'Ano'
 };
@@ -518,7 +552,7 @@ function linkWhatsApp(telefone){
 const regDiasContainer = document.getElementById('registros-dias');
 const regEmpty = document.getElementById('empty-registros');
 const regStatus = document.getElementById('status-registros');
-const regFieldsExibidos = ['cliente','horario','carro','servico','itinerario','motorista','status','observacoes']; // 'dia' vira o cabeçalho do grupo
+const regFieldsExibidos = ['cliente','horario','carro','servico','itinerario','motorista','status','observacoes','valor','pagamento']; // 'dia' vira o cabeçalho do grupo
 
 let todosRegistros = [];
 const filtroMes = document.getElementById('filtro-mes');
@@ -591,7 +625,7 @@ function aplicarFiltroRegistros(){
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Cliente</th><th>Horário</th><th>Carro</th><th>Serviço</th><th>Itinerário</th><th>Motorista</th><th>Status</th><th>Observações</th><th></th></tr></thead>
+          <thead><tr><th>Cliente</th><th>Horário</th><th>Carro</th><th>Serviço</th><th>Itinerário</th><th>Motorista</th><th>Status</th><th>Observações</th><th>Valor</th><th>Pagamento</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
       </div>`;
@@ -607,6 +641,13 @@ function aplicarFiltroRegistros(){
       const spanStatus = tr.querySelector('[data-field="status"]');
       const statusTexto = d.data().status || 'Agendado';
       if(spanStatus) spanStatus.innerHTML = '<span class="badge-status '+classeStatus(statusTexto)+'">'+statusTexto+'</span>';
+      const spanValor = tr.querySelector('[data-field="valor"]');
+      if(spanValor) spanValor.textContent = formatarReais(d.data().valor);
+      const spanPg = tr.querySelector('[data-field="pagamento"]');
+      if(spanPg){
+        const pg = d.data().pagamento;
+        spanPg.innerHTML = pg ? '<span class="badge-status '+(pg === 'Pago' ? 'pago' : 'naopago')+'">'+pg+'</span>' : '—';
+      }
       // botão PDF para voltar e pegar o PDF de serviços já cadastrados
       const tdAcoes = tr.lastElementChild;
       if(tdAcoes && !tdAcoes.querySelector('.btn-pdf')){
@@ -689,11 +730,11 @@ document.getElementById('label-mes-filtro').addEventListener('click', abrirSelet
 // ---------- Exportar CSV ----------
 function exportarCSV(){
   const alvo = filtroMes.value;
-  const linhas = [['Cliente','Dia','Horário','Carro','Serviço','Itinerário','Motorista','Status','Observações']];
+  const linhas = [['Cliente','Dia','Horário','Carro','Serviço','Itinerário','Motorista','Status','Observações','Valor','Pagamento']];
   const base = alvo ? todosRegistros.filter(d => (d.data().dia||'').slice(0,7) === alvo) : todosRegistros;
   base.forEach(d=>{
     const x = d.data();
-    linhas.push([x.cliente||'', x.dia||'', x.horario||'', x.carro||'', x.servico||'', x.itinerario||'', x.motorista||'', x.status||'Agendado', x.observacoes||'']);
+    linhas.push([x.cliente||'', x.dia||'', x.horario||'', x.carro||'', x.servico||'', x.itinerario||'', x.motorista||'', x.status||'Agendado', x.observacoes||'', (x.valor !== undefined && x.valor !== null && x.valor !== '') ? Number(x.valor).toFixed(2).replace('.',',') : '', x.pagamento||'']);
   });
   const csv = linhas.map(l => l.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
@@ -799,7 +840,7 @@ const overlayRegistro = document.getElementById('overlay-registro');
 let editandoRegistroId = null;
 
 const OPCOES_CARRO = ['BYD Song Plus','Geely EX5','Jeep Commander','Fiat Scudo','Kia Carnival','Ford Territory','Van Sprinter Prata','Van Sprinter Preta','Van Transit Blindada','Van Transit Não Blindada'];
-const OPCOES_SERVICO = ['Transfer','Disposição'];
+const OPCOES_SERVICO = ['Transfer','Disposição','Orçamento'];
 
 // Preenche um <select> de lista fixa; se o valor salvo não estiver na lista
 // (registro antigo, por exemplo), acrescenta ele como opção extra pra não
@@ -848,9 +889,13 @@ function openModalRegistro(id, data){
   const obs = data ? (data.observacoes || '') : '';
   document.getElementById('f-observacoes').value = obs;
   document.getElementById('obs-contador').textContent = obs.length;
+  document.getElementById('f-valor').value = (data && data.valor !== undefined && data.valor !== null && data.valor !== '')
+    ? Number(data.valor).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
+  document.getElementById('f-pagamento').value = data ? (data.pagamento || 'Não pago') : 'Não pago';
   overlayRegistro.classList.add('open');
   document.getElementById('f-dia').focus();
 }
+document.getElementById('f-valor').addEventListener('input', e=>{ e.target.value = mascararMoeda(e.target.value); });
 document.getElementById('f-observacoes').addEventListener('input', e=>{
   document.getElementById('obs-contador').textContent = e.target.value.length;
 });
@@ -869,7 +914,9 @@ document.getElementById('save-registro').addEventListener('click', ()=>{
     itinerario: document.getElementById('f-itinerario').value,
     motorista: document.getElementById('f-motorista').value,
     status: document.getElementById('f-status').value,
-    observacoes: document.getElementById('f-observacoes').value.slice(0,100)
+    observacoes: document.getElementById('f-observacoes').value.slice(0,100),
+    valor: lerMoeda(document.getElementById('f-valor').value),
+    pagamento: document.getElementById('f-pagamento').value
   };
   if(editandoRegistroId){
     db.collection('registros').doc(editandoRegistroId).update(dados).catch(e=>console.error('Erro ao salvar:', e));
