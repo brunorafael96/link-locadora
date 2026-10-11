@@ -124,6 +124,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 20px;}
 .badge-status.concluido{background:#dcfce7;color:#166534;}
 .avatar-motorista{width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--accent);color:#fff;font-size:12px;font-weight:700;}
 img.avatar-motorista{background:var(--bg);}
+.thumb-carro{width:46px;height:34px;border-radius:7px;object-fit:cover;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--bg);border:1px solid var(--border);font-size:16px;}
 
 @media (max-width: 860px){
   .popover-mes{position:fixed;left:50%;top:30%;transform:translateX(-50%);width:min(290px,90vw);}
@@ -165,6 +166,7 @@ img.avatar-motorista{background:var(--bg);}
   <div class="tabs">
     <button class="tab active" data-panel="registros">Serviços do Dia</button>
     <button class="tab" data-panel="motoristas">Motoristas</button>
+    <button class="tab" data-panel="carros">Carros</button>
   </div>
   <div style="display:flex;align-items:center;gap:8px;">
     <button class="btn-tema" id="toggle-tema" aria-label="Alternar tema claro/escuro">🌙</button>
@@ -177,7 +179,7 @@ img.avatar-motorista{background:var(--bg);}
     <div id="resumo-hoje" class="resumo-hoje"></div>
     <div class="toolbar">
       <span class="status" id="status-registros">Carregando...</span>
-      <input type="text" class="busca-registros" id="busca-registros" placeholder="Buscar carro, motorista, serviço...">
+      <input type="text" class="busca-registros" id="busca-registros" placeholder="Buscar cliente, carro, motorista...">
       <div class="filtro">
         <button type="button" class="icone-calendario" id="btn-calendario" aria-label="Escolher mês">
           <span class="cal-topo" id="cal-topo-mes"></span>
@@ -215,27 +217,32 @@ img.avatar-motorista{background:var(--bg);}
       <div class="empty" id="empty-motoristas" style="display:none;">Nenhum motorista cadastrado ainda.</div>
     </div>
   </section>
+
+  <section id="panel-carros" class="panel">
+    <div class="toolbar">
+      <span class="status" id="status-carros">Carregando...</span>
+      <button class="primary" id="add-carro">+ Novo carro</button>
+    </div>
+    <div class="table-wrap">
+      <table id="tabela-carros">
+        <thead><tr><th>Modelo</th><th>Placa</th><th>Cor</th><th>Ano</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty" id="empty-carros" style="display:none;">Nenhum carro cadastrado ainda.</div>
+    </div>
+  </section>
 </main>
 <footer>Dados compartilhados em tempo real com todas as pessoas com acesso a esta página.</footer>
 
 <div class="overlay" id="overlay-registro">
   <div class="modal">
     <h2>Novo registro</h2>
+    <div class="field"><label>Cliente</label><input type="text" id="f-cliente" placeholder="Nome do cliente"></div>
     <div class="field"><label>Dia</label><input type="date" id="f-dia"></div>
     <div class="field"><label>Horário</label><input type="time" id="f-horario"></div>
     <div class="field"><label>Carro</label>
       <select id="f-carro">
         <option value="">Selecione o carro</option>
-        <option>BYD Song Plus</option>
-        <option>Geely EX5</option>
-        <option>Jeep Commander</option>
-        <option>Fiat Scudo</option>
-        <option>Kia Carnival</option>
-        <option>Ford Territory</option>
-        <option>Van Sprinter Prata</option>
-        <option>Van Sprinter Preta</option>
-        <option>Van Transit Blindada</option>
-        <option>Van Transit Não Blindada</option>
       </select>
     </div>
     <div class="field"><label>Serviço</label>
@@ -266,6 +273,26 @@ img.avatar-motorista{background:var(--bg);}
     <div class="modal-actions">
       <button class="secondary" id="cancel-registro">Cancelar</button>
       <button class="primary" id="save-registro">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-carro">
+  <div class="modal">
+    <h2>Novo carro</h2>
+    <div class="field"><label>Modelo</label><input type="text" id="c-modelo" placeholder="Ex: Jeep Commander"></div>
+    <div class="field"><label>Placa</label><input type="text" id="c-placa" placeholder="ABC1D23" maxlength="8" style="text-transform:uppercase;"></div>
+    <div class="field"><label>Cor</label><input type="text" id="c-cor" placeholder="Ex: Preta"></div>
+    <div class="field"><label>Ano</label><input type="text" id="c-ano" inputmode="numeric" maxlength="4" placeholder="2024"></div>
+    <div class="field"><label>Foto</label>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <img id="c-foto-preview" style="width:72px;height:54px;border-radius:8px;object-fit:cover;background:var(--bg);border:1px solid var(--border);display:none;">
+        <input type="file" accept="image/*" id="c-foto-input" style="flex:1;font-size:12.5px;">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="secondary" id="cancel-carro">Cancelar</button>
+      <button class="primary" id="save-carro">Salvar</button>
     </div>
   </div>
 </div>
@@ -367,10 +394,12 @@ async function init(){
   if(!db){
     document.getElementById('status-registros').textContent = 'Não foi possível conectar ao banco de dados.';
     document.getElementById('status-motoristas').textContent = 'Não foi possível conectar ao banco de dados.';
+    document.getElementById('status-carros').textContent = 'Não foi possível conectar ao banco de dados.';
     return;
   }
   watchRegistros();
   watchMotoristas();
+  watchCarros();
 }
 
 // window.confirm() fica bloqueado dentro da página publicada — por isso o
@@ -396,8 +425,9 @@ document.getElementById('ok-confirm').addEventListener('click', ()=>{
 // o campo que está com foco no momento.
 // Rótulos usados no modo "cartão" (telas estreitas), via data-label + CSS.
 const rotulos = {
-  dia:'Dia', horario:'Horário', carro:'Carro', servico:'Serviço', itinerario:'Itinerário', motorista:'Motorista', status:'Status', observacoes:'Observações',
-  nome:'Nome', telefone:'Telefone', endereco:'Onde mora', carteira:'Carteira'
+  cliente:'Cliente', dia:'Dia', horario:'Horário', carro:'Carro', servico:'Serviço', itinerario:'Itinerário', motorista:'Motorista', status:'Status', observacoes:'Observações',
+  nome:'Nome', telefone:'Telefone', endereco:'Onde mora', carteira:'Carteira',
+  modelo:'Modelo', placa:'Placa', cor:'Cor', ano:'Ano'
 };
 
 function formatarData(iso){
@@ -488,7 +518,7 @@ function linkWhatsApp(telefone){
 const regDiasContainer = document.getElementById('registros-dias');
 const regEmpty = document.getElementById('empty-registros');
 const regStatus = document.getElementById('status-registros');
-const regFieldsExibidos = ['horario','carro','servico','itinerario','motorista','status','observacoes']; // 'dia' vira o cabeçalho do grupo
+const regFieldsExibidos = ['cliente','horario','carro','servico','itinerario','motorista','status','observacoes']; // 'dia' vira o cabeçalho do grupo
 
 let todosRegistros = [];
 const filtroMes = document.getElementById('filtro-mes');
@@ -519,7 +549,7 @@ function aplicarFiltroRegistros(){
   if(termo){
     filtrados = filtrados.filter(d=>{
       const data = d.data();
-      return ['carro','servico','itinerario','motorista','observacoes'].some(f => (data[f]||'').toLowerCase().includes(termo));
+      return ['cliente','carro','servico','itinerario','motorista','observacoes'].some(f => (data[f]||'').toLowerCase().includes(termo));
     });
   }
 
@@ -561,7 +591,7 @@ function aplicarFiltroRegistros(){
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Horário</th><th>Carro</th><th>Serviço</th><th>Itinerário</th><th>Motorista</th><th>Status</th><th>Observações</th><th></th></tr></thead>
+          <thead><tr><th>Cliente</th><th>Horário</th><th>Carro</th><th>Serviço</th><th>Itinerário</th><th>Motorista</th><th>Status</th><th>Observações</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
       </div>`;
@@ -659,11 +689,11 @@ document.getElementById('label-mes-filtro').addEventListener('click', abrirSelet
 // ---------- Exportar CSV ----------
 function exportarCSV(){
   const alvo = filtroMes.value;
-  const linhas = [['Dia','Horário','Carro','Serviço','Itinerário','Motorista','Status','Observações']];
+  const linhas = [['Cliente','Dia','Horário','Carro','Serviço','Itinerário','Motorista','Status','Observações']];
   const base = alvo ? todosRegistros.filter(d => (d.data().dia||'').slice(0,7) === alvo) : todosRegistros;
   base.forEach(d=>{
     const x = d.data();
-    linhas.push([x.dia||'', x.horario||'', x.carro||'', x.servico||'', x.itinerario||'', x.motorista||'', x.status||'Agendado', x.observacoes||'']);
+    linhas.push([x.cliente||'', x.dia||'', x.horario||'', x.carro||'', x.servico||'', x.itinerario||'', x.motorista||'', x.status||'Agendado', x.observacoes||'']);
   });
   const csv = linhas.map(l => l.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
@@ -807,9 +837,10 @@ function preencherSelectMotoristas(valorAtual){
 function openModalRegistro(id, data){
   editandoRegistroId = id || null;
   document.querySelector('#overlay-registro h2').textContent = id ? 'Editar registro' : 'Novo registro';
+  document.getElementById('f-cliente').value = data ? (data.cliente || '') : '';
   document.getElementById('f-dia').value = data ? (data.dia || '') : hojeLocalISO();
   document.getElementById('f-horario').value = data ? (data.horario || '') : '';
-  definirSelectFixo('f-carro', OPCOES_CARRO, data ? data.carro : '');
+  preencherSelectCarros(data ? data.carro : '');
   definirSelectFixo('f-servico', OPCOES_SERVICO, data ? data.servico : '');
   document.getElementById('f-itinerario').value = data ? (data.itinerario || '') : '';
   preencherSelectMotoristas(data ? data.motorista : '');
@@ -830,6 +861,7 @@ document.getElementById('save-registro').addEventListener('click', ()=>{
   if(!db) return;
   const dia = document.getElementById('f-dia').value || hojeLocalISO();
   const dados = {
+    cliente: document.getElementById('f-cliente').value.trim(),
     dia,
     horario: document.getElementById('f-horario').value,
     carro: document.getElementById('f-carro').value,
@@ -865,6 +897,7 @@ async function gerarPdfServicoCompleto(dadosServico){
   doc.setFontSize(12.5); doc.setFont(undefined,'bold'); doc.text('Serviço', 14, y); y += 9;
   doc.setFontSize(10.5);
   const linhasServico = [
+    ['Cliente', dadosServico.cliente || '-'],
     ['Dia', formatarData(dadosServico.dia)],
     ['Horário', dadosServico.horario || '-'],
     ['Carro', dadosServico.carro || '-'],
@@ -887,6 +920,31 @@ async function gerarPdfServicoCompleto(dadosServico){
 
   y += 8;
   doc.setDrawColor(220); doc.line(14, y, 196, y); y += 14;
+
+  // ----- Carro (dados do cadastro + foto) -----
+  if(y > 205){ doc.addPage(); y = 20; }
+  const carroDoc = acharCarro(dadosServico.carro);
+  const cd = carroDoc ? carroDoc.data() : null;
+  const yCarro = y;
+  doc.setFontSize(12.5); doc.setFont(undefined,'bold'); doc.text('Carro', 14, y);
+  if(cd && cd.foto){ try{ doc.addImage(cd.foto, 'JPEG', 148, y-7, 48, 36); }catch(e){} }
+  y += 9;
+  doc.setFontSize(10.5);
+  [
+    ['Modelo', cd ? (cd.modelo||'-') : (dadosServico.carro || '-')],
+    ['Placa', cd ? (cd.placa||'-') : '-'],
+    ['Cor', cd ? (cd.cor||'-') : '-'],
+    ['Ano', cd ? (cd.ano||'-') : '-'],
+  ].forEach(([l,v])=>{
+    doc.setFont(undefined,'bold'); doc.text(l+':', 14, y);
+    doc.setFont(undefined,'normal'); doc.text(String(v), 55, y, {maxWidth:88});
+    y += 8;
+  });
+  y = Math.max(y, yCarro + 36);
+
+  y += 4;
+  doc.setDrawColor(220); doc.line(14, y, 196, y); y += 14;
+  if(y > 235){ doc.addPage(); y = 20; }
 
   doc.setFontSize(12.5); doc.setFont(undefined,'bold'); doc.text('Motorista', 14, y);
   const motorista = todosMotoristas.find(d => (d.data().nome||'').trim().toLowerCase() === (dadosServico.motorista||'').trim().toLowerCase());
@@ -1020,6 +1078,161 @@ function watchMotoristas(){
     renderizarMotoristas();
   }, err=>{ motStatus.textContent = 'Erro ao carregar.'; });
 }
+
+
+// ---------- Cadastro de carros ----------
+const carBody = document.querySelector('#tabela-carros tbody');
+const carEmpty = document.getElementById('empty-carros');
+const carStatus = document.getElementById('status-carros');
+const carFields = ['modelo','placa','cor','ano'];
+let todosCarros = [];
+
+// Texto que identifica o carro nos serviços: "Modelo - PLACA"
+function rotuloCarro(x){
+  return (x.modelo||'').trim() + (x.placa ? ' - ' + String(x.placa).toUpperCase().trim() : '');
+}
+// Acha o cadastro do carro a partir do texto salvo no serviço
+function acharCarro(texto){
+  const alvo = (texto||'').trim().toLowerCase();
+  if(!alvo) return null;
+  return todosCarros.find(d => rotuloCarro(d.data()).toLowerCase() === alvo)
+      || todosCarros.find(d => (d.data().modelo||'').trim().toLowerCase() === alvo)
+      || null;
+}
+
+// Lista de carros do formulário de serviço: vem do cadastro (e, enquanto não
+// houver nenhum carro cadastrado, mantém a lista antiga para nada quebrar).
+function preencherSelectCarros(valorAtual){
+  const sel = document.getElementById('f-carro');
+  sel.innerHTML = '<option value="">Selecione o carro</option>';
+  const cadastrados = todosCarros.map(d => rotuloCarro(d.data())).filter(Boolean);
+  const opcoes = cadastrados.length ? cadastrados : OPCOES_CARRO;
+  opcoes.forEach(t=>{
+    const opt = document.createElement('option');
+    opt.value = t; opt.textContent = t;
+    sel.appendChild(opt);
+  });
+  let valor = valorAtual || '';
+  if(valor && !opcoes.includes(valor)){
+    // serviço antigo salvo só com o modelo: seleciona o carro cadastrado equivalente
+    const doCadastro = acharCarro(valor);
+    if(doCadastro && opcoes.includes(rotuloCarro(doCadastro.data()))){
+      valor = rotuloCarro(doCadastro.data());
+    }else{
+      const opt = document.createElement('option');
+      opt.value = valor; opt.textContent = valor;
+      sel.appendChild(opt);
+    }
+  }
+  sel.value = valor;
+}
+
+function renderizarCarros(){
+  renderRows(carBody, carEmpty, carStatus, todosCarros, carFields, id=>{
+    askConfirm('Excluir este carro?', ()=> db.collection('carros').doc(id).delete().catch(e=>console.error('Erro ao excluir:', e)));
+  }, 'carro(s)', null, undefined, (id, data)=> openModalCarro(id, data), false);
+
+  // miniatura da foto ao lado do modelo
+  todosCarros.forEach(d=>{
+    const tr = carBody.querySelector('tr[data-id="'+d.id+'"]');
+    if(!tr) return;
+    const tdModelo = tr.querySelector('[data-field="modelo"]')?.closest('td');
+    if(!tdModelo) return;
+    tdModelo.querySelector('.thumb-carro')?.remove();
+    const foto = d.data().foto;
+    const thumb = document.createElement(foto ? 'img' : 'span');
+    thumb.className = 'thumb-carro';
+    if(foto){ thumb.src = foto; } else { thumb.textContent = '🚗'; }
+    tdModelo.style.display = 'flex'; tdModelo.style.alignItems = 'center'; tdModelo.style.gap = '8px';
+    tdModelo.insertBefore(thumb, tdModelo.firstChild);
+  });
+}
+
+function watchCarros(){
+  db.collection('carros').orderBy('criadoEm','asc').onSnapshot(snap=>{
+    todosCarros = snap.docs;
+    if(overlayRegistro.classList.contains('open')){
+      preencherSelectCarros(document.getElementById('f-carro').value);
+    }
+    renderizarCarros();
+  }, err=>{ carStatus.textContent = 'Erro ao carregar.'; });
+}
+
+// Foto do carro: recorte 4:3 (400x300), comprimida em JPEG
+function comprimirImagemCarro(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const w = 400, h = 300, proporcao = w/h;
+        let sw = img.width, sh = img.height, sx = 0, sy = 0;
+        if(sw/sh > proporcao){ sw = sh*proporcao; sx = (img.width - sw)/2; }
+        else{ sh = sw/proporcao; sy = (img.height - sh)/2; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+const overlayCarro = document.getElementById('overlay-carro');
+let editandoCarroId = null;
+let fotoCarroAtual = null;
+
+document.getElementById('c-foto-input').addEventListener('change', async e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    fotoCarroAtual = await comprimirImagemCarro(file);
+    const prev = document.getElementById('c-foto-preview');
+    prev.src = fotoCarroAtual;
+    prev.style.display = 'block';
+  }catch(err){ console.error('Erro ao processar foto:', err); }
+});
+
+function openModalCarro(id, data){
+  editandoCarroId = id || null;
+  document.querySelector('#overlay-carro h2').textContent = id ? 'Editar carro' : 'Novo carro';
+  document.getElementById('c-modelo').value = data ? (data.modelo || '') : '';
+  document.getElementById('c-placa').value = data ? (data.placa || '') : '';
+  document.getElementById('c-cor').value = data ? (data.cor || '') : '';
+  document.getElementById('c-ano').value = data ? (data.ano || '') : '';
+  document.getElementById('c-foto-input').value = '';
+  fotoCarroAtual = data ? (data.foto || null) : null;
+  const prev = document.getElementById('c-foto-preview');
+  if(fotoCarroAtual){ prev.src = fotoCarroAtual; prev.style.display = 'block'; }
+  else{ prev.style.display = 'none'; }
+  overlayCarro.classList.add('open');
+  document.getElementById('c-modelo').focus();
+}
+document.getElementById('add-carro').addEventListener('click', ()=> openModalCarro());
+document.getElementById('cancel-carro').addEventListener('click', ()=> overlayCarro.classList.remove('open'));
+overlayCarro.addEventListener('click', e=>{ if(e.target === overlayCarro) overlayCarro.classList.remove('open'); });
+document.getElementById('save-carro').addEventListener('click', ()=>{
+  if(!db) return;
+  const modelo = document.getElementById('c-modelo').value.trim();
+  if(!modelo){ document.getElementById('c-modelo').focus(); return; }
+  const dados = {
+    modelo,
+    placa: document.getElementById('c-placa').value.trim().toUpperCase(),
+    cor: document.getElementById('c-cor').value.trim(),
+    ano: document.getElementById('c-ano').value.trim(),
+    foto: fotoCarroAtual || ''
+  };
+  if(editandoCarroId){
+    db.collection('carros').doc(editandoCarroId).update(dados).catch(e=>console.error('Erro ao salvar:', e));
+  }else{
+    db.collection('carros').add({...dados, criadoEm: Date.now()}).catch(e=>console.error('Erro ao salvar:', e));
+  }
+  overlayCarro.classList.remove('open');
+});
 
 // Modal de novo/editar motorista — pede nome, telefone e onde mora
 const overlayMotorista = document.getElementById('overlay-motorista');
