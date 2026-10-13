@@ -398,6 +398,17 @@ function lerMoeda(texto){
   return isNaN(n) ? null : n;
 }
 
+// Abre uma janela de cadastro sempre com a rolagem no topo; o foco automático
+// só vale para mouse (no celular o teclado cobriria o formulário).
+function abrirOverlay(overlay, focoId){
+  overlay.classList.add('open');
+  const m = overlay.querySelector('.modal');
+  if(m){ m.scrollTop = 0; requestAnimationFrame(()=>{ m.scrollTop = 0; }); }
+  if(focoId && window.matchMedia('(pointer:fine)').matches){
+    document.getElementById(focoId).focus({preventScroll:true});
+  }
+}
+
 function hojeLocalISO(){
   const d = new Date();
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -892,8 +903,7 @@ function openModalRegistro(id, data){
   document.getElementById('f-valor').value = (data && data.valor !== undefined && data.valor !== null && data.valor !== '')
     ? Number(data.valor).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
   document.getElementById('f-pagamento').value = data ? (data.pagamento || 'Não pago') : 'Não pago';
-  overlayRegistro.classList.add('open');
-  document.getElementById('f-dia').focus();
+  abrirOverlay(overlayRegistro, 'f-cliente');
 }
 document.getElementById('f-valor').addEventListener('input', e=>{ e.target.value = mascararMoeda(e.target.value); });
 document.getElementById('f-observacoes').addEventListener('input', e=>{
@@ -940,10 +950,30 @@ async function gerarPdfServicoCompleto(dadosServico){
   doc.setTextColor(0);
   doc.setDrawColor(220); doc.line(14, 37, 196, 37);
 
+  const LIMITE = 284; // fim útil da página A4 (mm) — tudo precisa caber em UMA página
+
+  // escreve "Rótulo: valor" quebrando o valor em linhas, sem sobrepor a linha seguinte
+  function campo(rotulo, valor, largura){
+    doc.setFont(undefined,'bold'); doc.text(rotulo + ':', 14, y);
+    doc.setFont(undefined,'normal');
+    // a fonte padrão do PDF não tem a seta →; troca por ">" para não sair como lixo
+    const linhas = doc.splitTextToSize(String(valor).replace(/\s*[→➜➔⇒]\s*/g, ' > '), largura);
+    doc.text(linhas, 55, y);
+    y += Math.max(8, linhas.length * 5 + 3);
+  }
+  function fotoComMoldura(foto, x, yTopo, w, h){
+    try{
+      doc.addImage(foto, 'JPEG', x, yTopo, w, h);
+      doc.setDrawColor(210); doc.setLineWidth(0.3);
+      doc.roundedRect(x, yTopo, w, h, 1.5, 1.5);
+      doc.setLineWidth(0.2);
+    }catch(e){}
+  }
+
   let y = 50;
   doc.setFontSize(12.5); doc.setFont(undefined,'bold'); doc.text('Serviço', 14, y); y += 9;
   doc.setFontSize(10.5);
-  const linhasServico = [
+  [
     ['Cliente', dadosServico.cliente || '-'],
     ['Dia', formatarData(dadosServico.dia)],
     ['Horário', dadosServico.horario || '-'],
@@ -951,63 +981,51 @@ async function gerarPdfServicoCompleto(dadosServico){
     ['Serviço', dadosServico.servico || '-'],
     ['Itinerário', dadosServico.itinerario || '-'],
     ['Status', dadosServico.status || 'Agendado'],
-  ];
-  linhasServico.forEach(([l,v])=>{
-    doc.setFont(undefined,'bold'); doc.text(l+':', 14, y);
-    doc.setFont(undefined,'normal'); doc.text(String(v), 55, y, {maxWidth:135});
-    y += 8;
-  });
-  if(dadosServico.observacoes){
-    doc.setFont(undefined,'bold'); doc.text('Observações:', 14, y);
-    doc.setFont(undefined,'normal');
-    const linhasObs = doc.splitTextToSize(dadosServico.observacoes, 135);
-    doc.text(linhasObs, 55, y);
-    y += 8 * linhasObs.length;
-  }
+  ].forEach(([l,v])=> campo(l, v, 141));
+  if(dadosServico.observacoes) campo('Observações', dadosServico.observacoes, 141);
 
-  y += 8;
+  y += 2;
   doc.setDrawColor(220); doc.line(14, y, 196, y); y += 14;
 
+  // Fotos grandes: se o conteúdo for longo, elas diminuem só o necessário para caber na página
+  let k = 1;
+  const CAR_W = 90, CAR_H = 67.5, DRV = 50;
+  while(k > 0.5 && (y - 7 + CAR_H*k + 20 + DRV*k) > LIMITE) k -= 0.05;
+  const carW = CAR_W*k, carH = CAR_H*k, drv = DRV*k;
+
   // ----- Carro (dados do cadastro + foto) -----
-  if(y > 205){ doc.addPage(); y = 20; }
   const carroDoc = acharCarro(dadosServico.carro);
   const cd = carroDoc ? carroDoc.data() : null;
   const yCarro = y;
   doc.setFontSize(12.5); doc.setFont(undefined,'bold'); doc.text('Carro', 14, y);
-  if(cd && cd.foto){ try{ doc.addImage(cd.foto, 'JPEG', 148, y-7, 48, 36); }catch(e){} }
+  const temFotoCarro = !!(cd && cd.foto);
+  if(temFotoCarro) fotoComMoldura(cd.foto, 196 - carW, yCarro - 7, carW, carH);
   y += 9;
   doc.setFontSize(10.5);
+  const larguraCarro = temFotoCarro ? (196 - carW - 4 - 55) : 141;
   [
     ['Modelo', cd ? (cd.modelo||'-') : (dadosServico.carro || '-')],
     ['Placa', cd ? (cd.placa||'-') : '-'],
     ['Cor', cd ? (cd.cor||'-') : '-'],
     ['Ano', cd ? (cd.ano||'-') : '-'],
-  ].forEach(([l,v])=>{
-    doc.setFont(undefined,'bold'); doc.text(l+':', 14, y);
-    doc.setFont(undefined,'normal'); doc.text(String(v), 55, y, {maxWidth:88});
-    y += 8;
-  });
-  y = Math.max(y, yCarro + 36);
+  ].forEach(([l,v])=> campo(l, v, larguraCarro));
+  y = Math.max(y - 3, temFotoCarro ? yCarro - 7 + carH : 0) + 6;
 
-  y += 4;
   doc.setDrawColor(220); doc.line(14, y, 196, y); y += 14;
-  if(y > 235){ doc.addPage(); y = 20; }
 
+  // ----- Motorista (foto, nome e telefone) -----
   doc.setFontSize(12.5); doc.setFont(undefined,'bold'); doc.text('Motorista', 14, y);
   const motorista = todosMotoristas.find(d => (d.data().nome||'').trim().toLowerCase() === (dadosServico.motorista||'').trim().toLowerCase());
   const md = motorista ? motorista.data() : null;
-  if(md && md.foto){ try{ doc.addImage(md.foto, 'JPEG', 165, y-7, 28, 28); }catch(e){} }
+  const temFotoMot = !!(md && md.foto);
+  if(temFotoMot) fotoComMoldura(md.foto, 196 - drv, y - 7, drv, drv);
   y += 9;
   doc.setFontSize(10.5);
-  const linhasMotorista = [
+  const larguraMot = temFotoMot ? (196 - drv - 4 - 55) : 141;
+  [
     ['Nome', md ? (md.nome||'-') : (dadosServico.motorista || '-')],
     ['Telefone', md ? (md.telefone||'-') : '-'],
-  ];
-  linhasMotorista.forEach(([l,v])=>{
-    doc.setFont(undefined,'bold'); doc.text(l+':', 14, y);
-    doc.setFont(undefined,'normal'); doc.text(String(v), 55, y, {maxWidth:95});
-    y += 8;
-  });
+  ].forEach(([l,v])=> campo(l, v, larguraMot));
 
   return doc.output('blob');
 }
@@ -1212,7 +1230,7 @@ function comprimirImagemCarro(file){
     reader.onload = ()=>{
       const img = new Image();
       img.onload = ()=>{
-        const w = 400, h = 300, proporcao = w/h;
+        const w = 800, h = 600, proporcao = w/h;
         let sw = img.width, sh = img.height, sx = 0, sy = 0;
         if(sw/sh > proporcao){ sw = sh*proporcao; sx = (img.width - sw)/2; }
         else{ sh = sw/proporcao; sy = (img.height - sh)/2; }
@@ -1256,8 +1274,7 @@ function openModalCarro(id, data){
   const prev = document.getElementById('c-foto-preview');
   if(fotoCarroAtual){ prev.src = fotoCarroAtual; prev.style.display = 'block'; }
   else{ prev.style.display = 'none'; }
-  overlayCarro.classList.add('open');
-  document.getElementById('c-modelo').focus();
+  abrirOverlay(overlayCarro, 'c-modelo');
 }
 document.getElementById('add-carro').addEventListener('click', ()=> openModalCarro());
 document.getElementById('cancel-carro').addEventListener('click', ()=> overlayCarro.classList.remove('open'));
@@ -1292,7 +1309,7 @@ function comprimirImagem(file){
     reader.onload = ()=>{
       const img = new Image();
       img.onload = ()=>{
-        const tam = 240;
+        const tam = 400;
         const canvas = document.createElement('canvas');
         canvas.width = tam; canvas.height = tam;
         const ctx = canvas.getContext('2d');
@@ -1333,8 +1350,7 @@ function openModalMotorista(id, data){
   const prev = document.getElementById('m-foto-preview');
   if(fotoMotoristaAtual){ prev.src = fotoMotoristaAtual; prev.style.display = 'block'; }
   else{ prev.style.display = 'none'; }
-  overlayMotorista.classList.add('open');
-  document.getElementById('m-nome').focus();
+  abrirOverlay(overlayMotorista, 'm-nome');
 }
 document.getElementById('add-motorista').addEventListener('click', ()=> openModalMotorista());
 document.getElementById('cancel-motorista').addEventListener('click', ()=> overlayMotorista.classList.remove('open'));
