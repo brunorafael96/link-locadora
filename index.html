@@ -333,6 +333,14 @@ img.avatar-motorista{background:var(--bg);}
         <option>D</option>
       </select>
     </div>
+    <div class="field"><label>Carteira de motorista — CNH (PDF ou foto)</label>
+      <input type="file" accept="application/pdf,image/*" id="m-cnh-input" style="font-size:12.5px;">
+      <img id="m-cnh-preview" alt="CNH" style="display:none;width:100%;margin-top:8px;border-radius:8px;border:1px solid var(--border);background:#fff;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;">
+        <span id="m-cnh-status" style="font-size:12px;color:var(--muted);"></span>
+        <button type="button" class="del" id="m-cnh-remover" style="display:none;">Remover</button>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="secondary" id="cancel-motorista">Cancelar</button>
       <button class="primary" id="save-motorista">Salvar</button>
@@ -353,7 +361,7 @@ img.avatar-motorista{background:var(--bg);}
 <div class="overlay" id="overlay-pdf">
   <div class="modal">
     <h2 id="pdf-titulo">Serviço cadastrado!</h2>
-    <p style="font-size:13px;color:var(--muted);margin:-10px 0 14px;">PDF da ordem de serviço gerado.</p>
+    <p style="font-size:13px;color:var(--muted);margin:-10px 0 14px;">PDF gerado.</p>
     <div style="display:flex;flex-direction:column;gap:9px;">
       <button class="primary" id="pdf-compartilhar">📤 Compartilhar (WhatsApp, E-mail...)</button>
       <button class="secondary" id="pdf-imprimir">🖨️ Imprimir</button>
@@ -366,6 +374,7 @@ img.avatar-motorista{background:var(--bg);}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
@@ -1027,6 +1036,26 @@ async function gerarPdfServicoCompleto(dadosServico){
     ['Telefone', md ? (md.telefone||'-') : '-'],
   ].forEach(([l,v])=> campo(l, v, larguraMot));
 
+  // ----- CNH do motorista (segunda página, em alta resolução) -----
+  if(md && md.cnh){
+    doc.addPage();
+    let y2 = 20;
+    doc.setFontSize(12.5); doc.setFont(undefined,'bold'); doc.setTextColor(0);
+    doc.text('CNH do motorista' + (md.nome ? ' - ' + md.nome : ''), 14, y2);
+    y2 += 8;
+    try{
+      const props = doc.getImageProperties(md.cnh);
+      const ratio = props.height / props.width;
+      const disp = LIMITE - y2;
+      let w = 182, h = w * ratio;
+      if(h > disp){ h = disp; w = h / ratio; }
+      const x = 14 + (182 - w) / 2;
+      doc.addImage(md.cnh, 'JPEG', x, y2, w, h);
+      doc.setDrawColor(210); doc.setLineWidth(0.3);
+      doc.rect(x, y2, w, h);
+    }catch(e){ console.error('Erro ao incluir CNH no PDF:', e); }
+  }
+
   return doc.output('blob');
 }
 
@@ -1073,6 +1102,68 @@ document.getElementById('pdf-compartilhar').addEventListener('click', async ()=>
   }
   alert('Este navegador não permite compartilhar arquivos diretamente. Use "Baixar PDF" e envie manualmente pelo WhatsApp, e-mail, etc.');
 });
+
+// ---------- PDF do motorista: foto grande, nome, telefone e CNH em alta resolução ----------
+async function gerarPdfMotorista(md){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const M = 14, LARG = 182, FIM = 284;
+  let y = 16;
+
+  const FOTO = 80;
+  if(md.foto){
+    try{
+      doc.addImage(md.foto, 'JPEG', M, y, FOTO, FOTO);
+      doc.setDrawColor(210); doc.setLineWidth(0.3);
+      doc.roundedRect(M, y, FOTO, FOTO, 1.5, 1.5);
+    }catch(e){}
+  }else{
+    doc.setDrawColor(210); doc.setLineWidth(0.3);
+    doc.roundedRect(M, y, FOTO, FOTO, 1.5, 1.5);
+    doc.setFontSize(10); doc.setTextColor(150);
+    doc.text('Sem foto', M + FOTO/2, y + FOTO/2, {align:'center'});
+    doc.setTextColor(0);
+  }
+
+  const xt = M + FOTO + 10;
+  const largTxt = 196 - xt;
+  let yt = y + 12;
+  doc.setFontSize(10.5); doc.setFont(undefined,'normal'); doc.setTextColor(130); doc.text('Nome', xt, yt);
+  doc.setTextColor(0); doc.setFont(undefined,'bold'); doc.setFontSize(20);
+  const linhasNome = doc.splitTextToSize((md.nome || '-').toString(), largTxt);
+  doc.text(linhasNome, xt, yt + 9);
+  yt += 9 + linhasNome.length * 8 + 8;
+  doc.setFontSize(10.5); doc.setFont(undefined,'normal'); doc.setTextColor(130); doc.text('Telefone', xt, yt);
+  doc.setTextColor(0); doc.setFont(undefined,'bold'); doc.setFontSize(16);
+  doc.text((md.telefone || '-').toString(), xt, yt + 8);
+
+  y += FOTO + 12;
+  doc.setDrawColor(220); doc.setLineWidth(0.2); doc.line(M, y - 6, 196, y - 6);
+  doc.setFontSize(12.5); doc.setFont(undefined,'bold'); doc.setTextColor(0);
+  doc.text('CNH', M, y);
+  y += 5;
+
+  if(md.cnh){
+    const props = doc.getImageProperties(md.cnh);
+    const ratio = props.height / props.width;
+    let disp = FIM - y;
+    let w = LARG, h = w * ratio;
+    if(h > disp){ h = disp; w = h / ratio; }
+    if(w < 110){ // ficaria pequena: vai para uma página inteira
+      doc.addPage(); y = 16; disp = FIM - y;
+      w = LARG; h = w * ratio;
+      if(h > disp){ h = disp; w = h / ratio; }
+    }
+    const x = M + (LARG - w) / 2;
+    doc.addImage(md.cnh, 'JPEG', x, y, w, h);
+    doc.setDrawColor(210); doc.setLineWidth(0.3);
+    doc.rect(x, y, w, h);
+  }else{
+    doc.setFontSize(10.5); doc.setFont(undefined,'normal'); doc.setTextColor(130);
+    doc.text('CNH não anexada.', M, y + 6);
+  }
+  return doc.output('blob');
+}
 
 // ---------- Motoristas ----------
 const motBody = document.querySelector('#tabela-motoristas tbody');
@@ -1130,6 +1221,27 @@ function renderizarMotoristas(){
     if(foto){ avatar.src = foto; } else { avatar.textContent = (d.data().nome||'?').trim().charAt(0).toUpperCase(); }
     tdNome.style.display = 'flex'; tdNome.style.alignItems = 'center'; tdNome.style.gap = '8px';
     tdNome.insertBefore(avatar, tdNome.firstChild);
+  });
+
+  // botão para compartilhar os dados + CNH em PDF
+  todosMotoristas.forEach(d=>{
+    const tr = motBody.querySelector('tr[data-id="'+d.id+'"]');
+    if(!tr) return;
+    const tdAcoes = tr.lastElementChild;
+    if(!tdAcoes || tdAcoes.querySelector('.btn-compartilhar')) return;
+    const b = document.createElement('button');
+    b.className = 'del btn-compartilhar';
+    b.style.color = '#16a34a';
+    b.textContent = 'Compartilhar';
+    b.addEventListener('click', async ()=>{
+      const dados = tr._data || d.data();
+      try{
+        const blob = await gerarPdfMotorista(dados);
+        const slug = (dados.nome||'motorista').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+        mostrarOpcoesPdf(blob, 'motorista-'+(slug||'dados')+'.pdf', 'Dados do motorista');
+      }catch(e){ console.error('Erro ao gerar PDF do motorista:', e); }
+    });
+    tdAcoes.insertBefore(b, tdAcoes.firstChild);
   });
 }
 
@@ -1302,6 +1414,139 @@ document.getElementById('save-carro').addEventListener('click', ()=>{
 const overlayMotorista = document.getElementById('overlay-motorista');
 let editandoMotoristaId = null;
 let fotoMotoristaAtual = null; // base64 da foto (já comprimida), ou null
+let cnhMotoristaAtual = null;  // base64 (JPEG) da CNH, ou null
+let cnhProcessando = false;
+const CNH_ORCAMENTO = 650000;  // limite de caracteres base64 (o documento do Firestore aceita ~1 MB no total)
+
+function atualizarPreviewCnh(msg){
+  const prev = document.getElementById('m-cnh-preview');
+  const st = document.getElementById('m-cnh-status');
+  const rem = document.getElementById('m-cnh-remover');
+  if(cnhMotoristaAtual){
+    prev.src = cnhMotoristaAtual; prev.style.display = 'block'; rem.style.display = 'inline';
+    st.textContent = msg || 'CNH anexada.';
+  }else{
+    prev.style.display = 'none'; rem.style.display = 'none';
+    st.textContent = msg || '';
+  }
+}
+
+// Remove as margens brancas da página do PDF, deixando só o documento
+function trimBranco(canvas){
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const d = ctx.getImageData(0,0,w,h).data;
+  let x0=w, y0=h, x1=-1, y1=-1;
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const i=(y*w+x)*4;
+      if(d[i+3]>10 && (d[i]<245 || d[i+1]<245 || d[i+2]<245)){
+        if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
+      }
+    }
+  }
+  if(x1<0) return canvas;
+  const pad = 16;
+  x0=Math.max(0,x0-pad); y0=Math.max(0,y0-pad); x1=Math.min(w-1,x1+pad); y1=Math.min(h-1,y1+pad);
+  const out = document.createElement('canvas');
+  out.width = x1-x0+1; out.height = y1-y0+1;
+  const o = out.getContext('2d');
+  o.fillStyle = '#fff'; o.fillRect(0,0,out.width,out.height);
+  o.drawImage(canvas, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+  return out;
+}
+
+function reduzirCanvas(canvas, maxW){
+  if(canvas.width <= maxW) return canvas;
+  const k = maxW / canvas.width;
+  const out = document.createElement('canvas');
+  out.width = maxW; out.height = Math.round(canvas.height * k);
+  const o = out.getContext('2d');
+  o.imageSmoothingQuality = 'high';
+  o.drawImage(canvas, 0, 0, out.width, out.height);
+  return out;
+}
+
+// Gera JPEG na melhor qualidade que caiba no limite de tamanho
+function canvasParaJpegLimitado(canvas, limite){
+  let c = canvas, q = 0.9;
+  for(let t=0; t<14; t++){
+    const url = c.toDataURL('image/jpeg', q);
+    if(url.length <= limite) return url;
+    if(q > 0.62){ q -= 0.07; }
+    else{
+      const n = document.createElement('canvas');
+      n.width = Math.round(c.width*0.88); n.height = Math.round(c.height*0.88);
+      n.getContext('2d').drawImage(c, 0, 0, n.width, n.height);
+      c = n;
+    }
+  }
+  return c.toDataURL('image/jpeg', 0.5);
+}
+
+async function arquivoParaCanvasCnh(file){
+  const MAXW = 1800;
+  const ehPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  if(ehPdf){
+    if(!window.pdfjsLib) throw new Error('pdf.js não carregou');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
+    const paginas = [];
+    for(let i=1; i<=Math.min(pdf.numPages, 2); i++){ // frente e verso
+      const page = await pdf.getPage(i);
+      const v0 = page.getViewport({scale:1});
+      const vp = page.getViewport({scale: 2800 / v0.width});
+      const c = document.createElement('canvas');
+      c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,c.width,c.height);
+      await page.render({canvasContext: ctx, viewport: vp}).promise;
+      paginas.push(trimBranco(c));
+    }
+    const gap = 30;
+    const w = Math.max(...paginas.map(p=>p.width));
+    const h = paginas.reduce((a,p)=>a+p.height,0) + gap*(paginas.length-1);
+    const out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    const o = out.getContext('2d');
+    o.fillStyle = '#fff'; o.fillRect(0,0,w,h);
+    let y = 0;
+    paginas.forEach(p=>{ o.drawImage(p, Math.round((w-p.width)/2), y); y += p.height + gap; });
+    return reduzirCanvas(out, MAXW);
+  }
+  // foto (JPG/PNG)
+  const url = URL.createObjectURL(file);
+  try{
+    const img = await new Promise((res, rej)=>{ const im = new Image(); im.onload = ()=>res(im); im.onerror = rej; im.src = url; });
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,c.width,c.height);
+    ctx.drawImage(img, 0, 0);
+    return reduzirCanvas(c, MAXW);
+  } finally { URL.revokeObjectURL(url); }
+}
+
+document.getElementById('m-cnh-input').addEventListener('change', async e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  cnhProcessando = true;
+  atualizarPreviewCnh('Processando a CNH...');
+  try{
+    const canvas = await arquivoParaCanvasCnh(file);
+    cnhMotoristaAtual = canvasParaJpegLimitado(canvas, CNH_ORCAMENTO);
+    atualizarPreviewCnh('CNH pronta (' + Math.round(cnhMotoristaAtual.length/1024) + ' KB). Clique em Salvar.');
+  }catch(err){
+    console.error('Erro ao processar CNH:', err);
+    atualizarPreviewCnh('Não foi possível ler o arquivo. Tente outro PDF ou uma foto da CNH.');
+  }
+  cnhProcessando = false;
+});
+document.getElementById('m-cnh-remover').addEventListener('click', ()=>{
+  cnhMotoristaAtual = null;
+  document.getElementById('m-cnh-input').value = '';
+  atualizarPreviewCnh('CNH removida. Clique em Salvar.');
+});
 
 function comprimirImagem(file){
   return new Promise((resolve, reject)=>{
@@ -1309,7 +1554,7 @@ function comprimirImagem(file){
     reader.onload = ()=>{
       const img = new Image();
       img.onload = ()=>{
-        const tam = 400;
+        const tam = 800;
         const canvas = document.createElement('canvas');
         canvas.width = tam; canvas.height = tam;
         const ctx = canvas.getContext('2d');
@@ -1350,6 +1595,9 @@ function openModalMotorista(id, data){
   const prev = document.getElementById('m-foto-preview');
   if(fotoMotoristaAtual){ prev.src = fotoMotoristaAtual; prev.style.display = 'block'; }
   else{ prev.style.display = 'none'; }
+  cnhMotoristaAtual = data ? (data.cnh || null) : null;
+  document.getElementById('m-cnh-input').value = '';
+  atualizarPreviewCnh();
   abrirOverlay(overlayMotorista, 'm-nome');
 }
 document.getElementById('add-motorista').addEventListener('click', ()=> openModalMotorista());
@@ -1357,13 +1605,19 @@ document.getElementById('cancel-motorista').addEventListener('click', ()=> overl
 overlayMotorista.addEventListener('click', e=>{ if(e.target === overlayMotorista) overlayMotorista.classList.remove('open'); });
 document.getElementById('save-motorista').addEventListener('click', ()=>{
   if(!db) return;
+  if(cnhProcessando){ atualizarPreviewCnh('Aguarde o processamento da CNH terminar...'); return; }
   const dados = {
     nome: document.getElementById('m-nome').value,
     telefone: document.getElementById('m-telefone').value,
     endereco: document.getElementById('m-endereco').value,
     carteira: document.getElementById('m-carteira').value,
-    foto: fotoMotoristaAtual || ''
+    foto: fotoMotoristaAtual || '',
+    cnh: cnhMotoristaAtual || ''
   };
+  if((dados.foto.length + dados.cnh.length) > 950000){
+    atualizarPreviewCnh('Foto + CNH ficaram grandes demais. Use uma foto menor ou remova a CNH e envie de novo.');
+    return;
+  }
   if(editandoMotoristaId){
     db.collection('motoristas').doc(editandoMotoristaId).update(dados).catch(e=>console.error('Erro ao salvar:', e));
   }else{
